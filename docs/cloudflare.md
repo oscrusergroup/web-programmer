@@ -48,6 +48,8 @@ The deploy command publishes the private firmware service and compiler image bef
 
 Before retrying the build, enable Workers Paid and R2 in the dashboard, then create `cartreader-build-cache` once through the dashboard or `pnpm run cf:bucket`. The build token must have permission to deploy both Workers, their Durable Object namespace, and Containers/registry images, and to access the R2 bucket. Cloudflare build settings are stored in the dashboard; changing this repository does not update an existing trigger's commands. See [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
 
+If installation fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, pnpm is rejecting dependencies published within its default 24-hour waiting period. `pnpm-workspace.yaml` lists exact-version exceptions for the Next.js and Cloudflare dependency versions already used in the verified build, including platform-specific SWC packages. These exceptions do not apply to future versions or unrelated packages. Keep the workspace file committed with the lockfile so a fresh CI install uses the same policy.
+
 ## GitHub and custom domains
 
 Anonymous GitHub API calls have low rate limits. Add a read-only GitHub token to the firmware Worker for a public installation:
