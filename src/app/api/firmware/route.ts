@@ -1,4 +1,5 @@
-import { getProject, FirmwareError } from "@/lib/server/project";
+import { cloudflareService } from "@/lib/server/backend";
+import { FirmwareError } from "@/lib/errors";
 export const runtime = "nodejs";
 export const maxDuration = 300;
 export async function GET(request: Request) {
@@ -6,6 +7,9 @@ export async function GET(request: Request) {
   if (id !== "latest" && !/^release:[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(id))
     return Response.json({ error: "Invalid firmware source." }, { status: 400 });
   try {
+    const service = cloudflareService();
+    if (service) return service.fetch(request);
+    const { getProject } = await import("@/lib/server/project");
     return Response.json(await getProject(id), { headers: { "Cache-Control": "no-store" } });
   } catch (error) {
     if (error instanceof FirmwareError)

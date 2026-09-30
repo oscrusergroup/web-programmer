@@ -1,0 +1,3 @@
+# Optional for the firmware Worker during local Cloudflare preview.
+# Copy to .dev.vars, then supply a read-only GitHub token if needed.
+# GITHUB_TOKEN=

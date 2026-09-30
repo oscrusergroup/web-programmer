@@ -1,4 +1,5 @@
 import { spawn } from "node:child_process";
+import { Buffer } from "node:buffer";
 
 export class CommandError extends Error {
   constructor(

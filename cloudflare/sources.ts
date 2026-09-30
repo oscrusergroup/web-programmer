@@ -1,0 +1,66 @@
+import { fetchReleases } from "../src/lib/server/releases";
+import { projectFromSource } from "../src/lib/project-config";
+import { FirmwareError } from "../src/lib/errors";
+import type { FirmwareProject, FirmwareRelease } from "../src/lib/firmware";
+import type { BuildStore } from "./build-cache";
+
+type Timed<T> = { at: number; value: T };
+export class FirmwareSources {
+  constructor(private store: BuildStore, private githubToken?: string, private fetcher: typeof fetch = fetch) {}
+  private async upstream(url: string, init: RequestInit = {}) {
+    const headers = new Headers(init.headers);
+    headers.set("User-Agent", "cartreader-web-programmer");
+    // Send credentials only to the GitHub API, never the raw source host.
+    if (url.startsWith("https://api.github.com/") && this.githubToken) headers.set("Authorization", `Bearer ${this.githubToken}`);
+    const response = await this.fetcher(url, { ...init, headers, signal: AbortSignal.timeout(20_000) });
+    if (!response.ok) throw new FirmwareError(`GitHub could not load this firmware (${response.status}). Please try again shortly.`, 502);
+    return response;
+  }
+  async releases(): Promise<FirmwareRelease[]> {
+    const object = await this.store.get("metadata/releases.json");
+    const cached = object ? await object.json<Timed<FirmwareRelease[]>>() : null;
+    if (cached && Date.now() - cached.at < 300_000) return cached.value;
+    const value = await fetchReleases((input, init) => this.upstream(String(input), init));
+    await this.store.put("metadata/releases.json", JSON.stringify({ at: Date.now(), value }));
+    return value;
+  }
+  async project(id = "latest"): Promise<FirmwareProject> {
+    if (id !== "latest" && !/^release:[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(id))
+      throw new FirmwareError("Invalid firmware source.");
+    if (id !== "latest" && !(await this.releases()).some(release => release.id === id))
+      throw new FirmwareError("Choose a published release from the list.");
+    const pointerKey = `metadata/${encodeURIComponent(id)}.json`;
+    const object = await this.store.get(pointerKey);
+    const cached = object ? await object.json<Timed<string>>() : null;
+    const ttl = id === "latest" ? 60_000 : 300_000;
+    let revision = cached && Date.now() - cached.at < ttl ? cached.value : "";
+    if (!revision) {
+      const ref = id === "latest" ? "HEAD" : id.slice("release:".length);
+      const response = await this.upstream(`https://api.github.com/repos/sanni/cartreader/commits/${encodeURIComponent(ref)}`, {
+        headers: { Accept: "application/vnd.github+json" },
+      });
+      const data = await response.json() as { sha?: unknown };
+      if (typeof data.sha !== "string" || !/^[a-f0-9]{40}$/.test(data.sha))
+        throw new FirmwareError("GitHub returned an invalid firmware revision.", 502);
+      revision = data.sha;
+    }
+    const projectKey = `projects/${revision}.json`;
+    const prepared = await this.store.get(projectKey);
+    let project = prepared ? await prepared.json<FirmwareProject>() : null;
+    if (!project) {
+      const raw = `https://raw.githubusercontent.com/sanni/cartreader/${revision}/Cart_Reader`;
+      const [config, cpp] = await Promise.all([this.upstream(`${raw}/Config.h`), this.upstream(`${raw}/OSCR.cpp`)]);
+      project = projectFromSource(await config.text(), await cpp.text(), revision);
+      await this.store.put(projectKey, JSON.stringify(project));
+    }
+    if (!cached || cached.value !== revision || Date.now() - cached.at >= ttl)
+      await this.store.put(pointerKey, JSON.stringify({ at: Date.now(), value: revision }));
+    return project;
+  }
+  async prepared(revision: string) {
+    if (!/^[a-f0-9]{40}$/.test(revision)) throw new FirmwareError("Invalid firmware revision.");
+    const object = await this.store.get(`projects/${revision}.json`);
+    if (!object) throw new FirmwareError("This firmware is no longer available. Select the firmware version again.", 409);
+    return object.json<FirmwareProject>();
+  }
+}

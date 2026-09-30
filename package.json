@@ -4,30 +4,41 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "predev": "npm run setup:firmware",
+    "predev": "node scripts/prepare-development.mjs",
     "dev": "next dev --webpack --hostname 0.0.0.0",
-    "prebuild": "npm run setup:firmware",
+    "prebuild": "node scripts/prepare-development.mjs",
     "build": "next build --webpack",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "pretest": "npm run setup:firmware",
     "test": "node --import tsx --test tests/*.test.ts",
     "setup:firmware": "node scripts/setup-firmware.mjs",
-    "setup:arduino": "node scripts/setup-arduino.mjs"
+    "setup:arduino": "node scripts/setup-arduino.mjs",
+    "cf:build": "node scripts/cloudflare.mjs build",
+    "cf:preview": "node scripts/cloudflare.mjs preview",
+    "cf:deploy:web": "node scripts/cloudflare.mjs deploy",
+    "cf:deploy:firmware": "wrangler deploy --config wrangler.firmware.jsonc",
+    "cf:deploy": "npm run cf:deploy:firmware && npm run cf:build && npm run cf:deploy:web",
+    "cf:dev:firmware": "wrangler dev --config wrangler.firmware.jsonc --port 8787",
+    "cf:types": "wrangler types --include-runtime=false --config wrangler.firmware.jsonc cloudflare/worker-env.d.ts && wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
+    "cf:bucket": "wrangler r2 bucket create cartreader-build-cache"
   },
   "dependencies": {
+    "@cloudflare/containers": "^0.3.7",
+    "@opennextjs/cloudflare": "^1.20.7",
+    "lucide-react": "^0.468.0",
     "next": "16.3.7",
     "react": "^19.2.0",
-    "react-dom": "^19.2.0",
-    "lucide-react": "^0.468.0"
+    "react-dom": "^19.2.0"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.3.3",
-    "tailwindcss": "4.3.3",
     "@types/node": "^22.0.0",
     "@types/react": "^19.0.0",
     "@types/react-dom": "^19.0.0",
+    "tailwindcss": "4.3.3",
+    "tsx": "^4.20.0",
     "typescript": "^5.9.0",
-    "tsx": "^4.20.0"
+    "wrangler": "^4.144.0"
   }
 }

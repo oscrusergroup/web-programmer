@@ -3,15 +3,14 @@ import path from "node:path";
 import { execFile } from "node:child_process";
 import { promisify } from "node:util";
 import { createHash } from "node:crypto";
-import { parseConfig, HARDWARE, CORE_SECTION } from "../config";
+import { projectFromSource } from "../project-config";
+import { FirmwareError } from "../errors";
+export { FirmwareError } from "../errors";
 import { firmwareCacheRoot, firmwareDirectory, firmwareSource } from "../firmware-path.mjs";
 import { setupFirmware } from "../../../scripts/setup-firmware.mjs";
 import { getReleases } from "./releases";
 
 const exec = promisify(execFile);
-export class FirmwareError extends Error {
-  constructor(message: string, public status = 400) { super(message); }
-}
 const state = globalThis as typeof globalThis & {
   cartreaderProjects?: Map<string, Promise<Awaited<ReturnType<typeof prepareProject>>>>;
 };
@@ -33,10 +32,7 @@ export async function getPreparedProject(revision: string) {
   } catch {
     throw new FirmwareError("This firmware is no longer available. Select the firmware version again.", 409);
   }
-  const schema = parseConfig(source);
-  if (!schema.some(o => HARDWARE.includes(o.key)) || !schema.some(o => o.section === CORE_SECTION))
-    throw new FirmwareError("This release uses an older Config.h format that this programmer does not support. Choose a newer release.", 422);
-  return { source, schema, revision, version: cpp.match(/FSTRING_VERSION\[\]\s*=\s*"([^"]+)"/)?.[1] ?? "Selected firmware" };
+  return projectFromSource(source, cpp, revision);
 }
 
 // Publish a complete, immutable sketch so a later setup or another visitor cannot change a build's input.

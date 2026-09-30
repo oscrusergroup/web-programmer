@@ -8,3 +8,7 @@ node_modules
 *.tsbuildinfo
 .DS_Store
 docs/screenshots
+
+.open-next
+.wrangler
+.dev.vars*

@@ -4,9 +4,13 @@ import path from "node:path";
 import { createHash } from "node:crypto";
 import { generateConfig, type Selection } from "../config";
 import { getPreparedProject, preparedSketchPath } from "./project";
+import toolchain from "../../../toolchain.json";
+import { BuildCoordinator, buildKey } from "../../../cloudflare/build-cache";
+import { FileBuildStore } from "./build-store";
+import { firmwareCacheRoot } from "../firmware-path.mjs";
 import { runCommand, CommandError } from "./run-command";
 
-export const FQBN = "arduino:avr:mega:cpu=atmega2560";
+export const FQBN = toolchain.fqbn;
 const statePath = path.join(process.cwd(), ".arduino");
 const cliPath =
   process.env.ARDUINO_CLI_PATH ||
@@ -17,6 +21,7 @@ const cliPath =
   );
 const compilerState = globalThis as typeof globalThis & {
   cartreaderBuilding?: boolean;
+  cartreaderCachedCompiler?: { root: string; coordinator: BuildCoordinator };
 };
 export class BuildError extends Error {
   constructor(
@@ -39,6 +44,18 @@ export async function compilerReady() {
   }
 }
 export async function compile(values: Selection, revision: string) {
+  const project = await getPreparedProject(revision);
+  const key = await buildKey(revision, generateConfig(project.source, project.schema, values));
+  const root = firmwareCacheRoot();
+  if (compilerState.cartreaderCachedCompiler?.root !== root)
+    compilerState.cartreaderCachedCompiler = {
+      root,
+      coordinator: new BuildCoordinator(new FileBuildStore(root), job => compileUncached(job.values, job.revision)),
+    };
+  return compilerState.cartreaderCachedCompiler.coordinator.build({ key, revision, values });
+}
+
+async function compileUncached(values: Selection, revision: string) {
   const project = await getPreparedProject(revision);
   const sketchPath = preparedSketchPath(revision);
   const config = generateConfig(project.source, project.schema, values);

@@ -4,7 +4,8 @@ import { execFileSync } from "node:child_process";
 import path from "node:path";
 
 const root = process.cwd();
-const version = "1.3.1";
+const toolchain = JSON.parse(await (await import("node:fs/promises")).readFile(new URL("../toolchain.json", import.meta.url), "utf8"));
+const version = toolchain.cli;
 const targets = {
   "darwin-arm64": "macOS_ARM64",
   "darwin-x64": "macOS_64bit",
@@ -66,23 +67,14 @@ const run = (args) =>
     { stdio: "inherit" },
   );
 run(["core", "update-index"]);
-run(["core", "install", "arduino:avr@1.8.6"]);
+run(["core", "install", toolchain.core]);
 run(["lib", "update-index"]);
-const libraries = [
-  "SdFat@2.3.0",
-  "U8g2@2.36.19",
-  "Adafruit NeoPixel@1.15.1",
-  "RotaryEncoder@1.5.3",
-  "Etherkit Si5351@2.2.0",
-  "RTClib@2.1.4",
-  "Adafruit BusIO@1.17.2",
-  "FreqCount@1.3.0",
-];
+const libraries = toolchain.libraries;
 run(["lib", "install", ...libraries]);
 await writeFile(
   path.join(state, "ready.json"),
   JSON.stringify(
-    { cli: version, core: "arduino:avr@1.8.6", libraries },
+    { cli: version, core: toolchain.core, libraries },
     null,
     2,
   ),

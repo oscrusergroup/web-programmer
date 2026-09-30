@@ -37,18 +37,9 @@ import {
 } from "@/lib/serial/web-serial";
 import { HardwareFields, CoreFields, OptionFields } from "./config-fields";
 import { BoardArt } from "./board-art";
-import type { FirmwareProject, FirmwareRelease } from "@/lib/firmware";
+import type { BuildResult, FirmwareProject, FirmwareRelease } from "@/lib/firmware";
 
-type Build = {
-  hex: string;
-  log: string;
-  config: string;
-  flashBytes: number;
-  ramBytes: number;
-  fingerprint: string;
-  duration: number;
-  version: string;
-};
+type Build = BuildResult;
 const steps = [
   { title: "Hardware", icon: CircuitBoard },
   { title: "Game systems", icon: Gamepad2 },
@@ -101,7 +92,7 @@ export function Programmer(initialProject: FirmwareProject) {
     setReleaseError("");
     try {
       const response = await fetch("/api/releases");
-      const data = await response.json();
+      const data = await response.json() as { releases: FirmwareRelease[]; error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load releases.");
       setReleases(data.releases);
     } catch (error) {
@@ -124,7 +115,7 @@ export function Programmer(initialProject: FirmwareProject) {
     setShowLog(false);
     try {
       const response = await fetch(`/api/firmware?source=${encodeURIComponent(id)}`);
-      const data = await response.json();
+      const data = await response.json() as FirmwareProject & { error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load firmware.");
       setProject(data);
       setValues(defaultSelection(data.schema));
@@ -141,7 +132,7 @@ export function Programmer(initialProject: FirmwareProject) {
     try {
       const response = await fetch("/api/health");
       if (!response.ok) throw new Error();
-      const data = await response.json();
+      const data = await response.json() as { ready?: boolean };
       setCompiler(data.ready === true);
     } catch {
       setCompiler(false);
@@ -221,7 +212,7 @@ export function Programmer(initialProject: FirmwareProject) {
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({ values, revision }),
       });
-      const data = await response.json();
+      const data = await response.json() as BuildResult & { error?: string };
       if (data.log) setLog(data.log);
       if (!response.ok) throw new Error(data.error || "Build failed.");
       setBuild(data);
@@ -530,8 +521,7 @@ export function Programmer(initialProject: FirmwareProject) {
                       />
                     </div>
                     <p className="mt-2 text-[10px] text-muted">
-                      RAM: {(build.ramBytes / 1024).toFixed(1)} / 8 KB · Built
-                      in {(build.duration / 1000).toFixed(1)}s
+                      RAM: {(build.ramBytes / 1024).toFixed(1)} / 8 KB · {build.cached ? "Reused cached build" : `Built in ${(build.duration / 1000).toFixed(1)}s`}
                     </p>
                   </div>
                 )}

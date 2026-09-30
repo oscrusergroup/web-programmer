@@ -1,0 +1,16 @@
+{
+  "recipe": "cartreader-mega-v1",
+  "cli": "1.3.1",
+  "core": "arduino:avr@1.8.6",
+  "fqbn": "arduino:avr:mega:cpu=atmega2560",
+  "libraries": [
+    "SdFat@2.3.0",
+    "U8g2@2.36.19",
+    "Adafruit NeoPixel@1.15.1",
+    "RotaryEncoder@1.5.3",
+    "Etherkit Si5351@2.2.0",
+    "RTClib@2.1.4",
+    "Adafruit BusIO@1.17.2",
+    "FreqCount@1.3.0"
+  ]
+}

@@ -47,11 +47,26 @@ Each loaded version gets an immutable sketch snapshot under `.firmware-cache/bui
 
 Validation requires one hardware revision, validates LCD channels in the firmware's **green, red, blue** order, handles RTC selection, and checks SNES/N64/flash/clock dependencies. VSELECT is restricted to HW3/HW5, matching the firmware's safe configurations. Warnings explain settings the firmware ignores or overrides. All configurable defines above Processing are represented in the interface. The default configuration has no hardware selection, so visitors must make that choice.
 
-Builds copy the sketch to a temporary directory and invoke Arduino CLI with an argument array and a fixed `arduino:avr:mega:cpu=atmega2560` target. The API accepts a prepared source revision and a complete allowlisted configuration, caps request bodies at 16 KiB, permits one compiler job per Node process, limits execution to four minutes, and cleans temporary files. Compiler output and actual flash/RAM usage are returned to the UI. No source code, shell arguments, paths or board targets are accepted from visitors.
+Builds copy the sketch to a temporary directory and invoke Arduino CLI with an argument array and a fixed `arduino:avr:mega:cpu=atmega2560` target. The API accepts a prepared source revision and a complete allowlisted configuration, caps request bodies at 16 KiB, serializes compiler jobs per Node process and shares equivalent pending builds, limits execution to four minutes, and cleans temporary files. Compiler output and actual flash/RAM usage are returned to the UI. No source code, shell arguments, paths or board targets are accepted from visitors.
 
 `src/lib/serial/` implements Intel HEX validation and the stock Mega 2560 STK500v2 bootloader flow at 115200 baud: reset, signature check, page programming, complete readback and restart. It validates checksums, response sequences and the 248 KiB application boundary. Bootloader and EEPROM are not modified. Protocol commands follow [Arduino's bootloader source](https://github.com/arduino/ArduinoCore-avr/tree/master/bootloaders/stk500v2); Web Serial behavior follows [Chrome's documentation](https://developer.chrome.com/docs/capabilities/serial).
 
-## Host the website
+## Deploy on Cloudflare
+
+The website runs on Cloudflare Workers. Cache misses compile on demand in Cloudflare Containers, coordinated by a Durable Object. Successful firmware builds are stored in R2 and reused across future visitors. Matching builds return without starting the compiler. The cache key includes the firmware commit, generated Config.h and the complete toolchain, so changed source or settings cannot return an older binary.
+
+With Docker running and a Workers Paid account with R2 and Containers enabled:
+
+```sh
+npm ci
+npx wrangler login
+npm run cf:bucket
+npm run cf:deploy
+```
+
+Create the bucket once; subsequent deploys reuse it. See [Cloudflare deployment instructions](docs/cloudflare.md) for bindings, GitHub token setup, preview commands, cache behavior and verification limits. Local Node development also caches successful builds under `.firmware-cache/builds/`.
+
+## Host on a persistent Node server
 
 Use a persistent Linux Node server or container with HTTPS. This application needs a writable temporary directory and permission to execute the AVR compiler. A static host or an Edge runtime cannot run this compiler.
 
@@ -73,7 +88,7 @@ Use `--no-cache` when building the container so Docker reruns the upstream firmw
 
 Terminate TLS at your hosting provider or reverse proxy. Set `APP_ORIGIN` to its exact public origin, preserve the incoming Host header, and allow at least 300 seconds for `/api/build`. Web Serial requires HTTPS, with localhost permitted for development. The compiler runs on the host; each visitor's USB device remains in their own browser. No USB passthrough is needed on the server.
 
-For a public installation, configure request rate limits on `/api/build` and `/api/firmware` at the proxy and cap container CPU/memory. The application's concurrency limit is per process; run one Node worker per container. There is no account system or shared job queue. A busy compiler returns an actionable retry message. Do not expose development mode publicly.
+For a public installation, configure request rate limits on `/api/build` and `/api/firmware` at the proxy and cap container CPU/memory. The application's concurrency limit is per process; run one Node worker per container. There is no account system; each Node process has its own bounded build queue. A busy compiler returns an actionable retry message. Do not expose development mode publicly.
 
 ## Verify
 

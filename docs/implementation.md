@@ -26,7 +26,7 @@ No hardware selection, conflicting dependent options, numeric injection, compila
 
 ## Verified result
 
-20 automated tests pass, TypeScript checks pass, and the Next.js production build succeeds. Browser checks cover hardware selection, searching cores, dependency validation, invalid numeric input, firmware invalidation, real server compilation and a 390px layout without horizontal overflow. HW5 with the original six cores compiles to 181,796 bytes of flash and 5,234 bytes of RAM. Physical USB upload and a Docker build remain unverified because no board was selected for flashing and Docker is unavailable in this environment.
+25 automated tests pass, TypeScript checks pass, and the Next.js production build succeeds. Browser checks cover hardware selection, searching cores, dependency validation, invalid numeric input, firmware invalidation, real server compilation and a 390px layout without horizontal overflow. HW5 with the original six cores compiles to 181,796 bytes of flash and 5,234 bytes of RAM. Physical USB upload and a Docker build remain unverified because no board was selected for flashing and Docker is unavailable in this environment.
 
 ## Firmware source dependency
 
@@ -39,3 +39,9 @@ The source selector defaults to latest repository code and lists published GitHu
 Release downloads run asynchronously with at most two source preparations per process. Published tags are allowlisted through the GitHub release list; arbitrary visitor refs and URLs are rejected. Releases have separate caches. Prepared sketches are stored by resolved commit in build-sources, and the build API requires that existing snapshot’s revision. Both configuration validation and compilation use the snapshot, protecting each visitor from cross-version changes. The latest checkout still refreshes on setup without a fixed revision in application configuration.
 
 Runtime needs Git, outbound GitHub access and a writable firmware cache. Docker includes Git. Release V15.5 compiled successfully for HW5 to 181,784 bytes flash and 5,234 bytes RAM. This verifies one release against the bundled libraries, not every historical release.
+
+## Cloudflare deployment and shared build cache
+
+OpenNext builds the website for Cloudflare Workers. The site uses a private service binding to the firmware Worker, which stores version metadata and successful builds in R2. A globally named CompilerContainer Durable Object serializes misses, coalesces identical jobs, persists results before responding, and starts an Arduino compiler container only when required. `toolchain.json` drives installation and cache identity. Native processes stay inside the Linux container; Worker code uses fetch, Web Crypto and R2 bindings.
+
+The browser identifies reused results. Latest HEAD is refreshed after a 60-second metadata cache; each selected version remains available by resolved commit. Build keys include source, generated configuration and toolchain identity. Regular Node hosting uses a corresponding disk cache. See `docs/cloudflare.md` for deployment and acceptance test requirements.

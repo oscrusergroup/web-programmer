@@ -12,3 +12,18 @@ export type FirmwareProject = {
   version: string;
   revision: string;
 };
+
+export type BuildResult = {
+  hex: string;
+  log: string;
+  config: string;
+  flashBytes: number;
+  ramBytes: number;
+  fingerprint: string;
+  duration: number;
+  version: string;
+  revision: string;
+  cached?: boolean;
+  cacheKey?: string;
+  builtAt?: string;
+};

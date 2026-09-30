@@ -1,0 +1,23 @@
+{
+  "$schema": "node_modules/wrangler/config-schema.json",
+  "name": "cartreader-firmware",
+  "main": "cloudflare/worker.ts",
+  "compatibility_date": "2026-09-30",
+  "workers_dev": false,
+  "preview_urls": false,
+  "r2_buckets": [
+    { "binding": "BUILD_CACHE", "bucket_name": "cartreader-build-cache" }
+  ],
+  "durable_objects": {
+    "bindings": [ { "name": "COMPILER", "class_name": "CompilerContainer" } ]
+  },
+  "migrations": [ { "tag": "v1", "new_sqlite_classes": ["CompilerContainer"] } ],
+  "containers": [ {
+    "class_name": "CompilerContainer",
+    "image": "./cloudflare/compiler/Dockerfile",
+    "image_build_context": ".",
+    "instance_type": "standard-1",
+    "max_instances": 1
+  } ],
+  "observability": { "enabled": true }
+}

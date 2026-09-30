@@ -16,7 +16,7 @@ test("accepts the public Host origin when Next binds to 0.0.0.0", async () => {
     }),
   );
   assert.equal(response.status, 400); // Configuration error, not a false cross-origin rejection.
-  assert.match((await response.json()).error, /hardware/);
+  assert.match((await response.json() as { error: string }).error, /hardware/);
 });
 test("rejects cross-origin, non-JSON, oversized and malformed requests", async () => {
   const request = (body: string, headers: Record<string, string>) =>
