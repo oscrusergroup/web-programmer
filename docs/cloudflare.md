@@ -48,7 +48,11 @@ For website-only updates after the firmware service is deployed, `pnpm exec wran
 
 The deploy command publishes the private firmware service and compiler image before the website, so its `FIRMWARE_SERVICE` binding can resolve. Workers Builds can build the Dockerfile in its own environment; local Docker is only needed when deploying the container from your computer. See [Cloudflare's Containers deployment guide](https://developers.cloudflare.com/containers/guides/deploy/).
 
+Workers Builds supplies `WRANGLER_CI_OVERRIDE_NAME` and `WRANGLER_CI_MATCH_TAG` for the connected website Worker. `cf:deploy:firmware` clears those two values only in the firmware deployment's child process, allowing it to deploy as `cartreader-firmware`. The website deployment keeps the original CI identity checks. Use the package script for firmware deployment in this job: invoking `wrangler deploy --config wrangler.firmware.jsonc` directly would rename the firmware Worker to the website Worker.
+
 Before retrying the build, enable Workers Paid and R2 in the dashboard, then create `cartreader-build-cache` once through the dashboard or `pnpm run cf:bucket`. The build token must have permission to deploy both Workers, their Durable Object namespace, and Containers/registry images, and to access the R2 bucket. Cloudflare build settings are stored in the dashboard; changing this repository does not update an existing trigger's commands. See [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+
+If deployment fails with `R2 bucket 'cartreader-build-cache' not found` (code 10085), open **R2 Object Storage** in the same account as the Workers, complete R2 activation if prompted, and create a bucket named exactly `cartreader-build-cache`. Declaring the binding in `wrangler.firmware.jsonc` does not create this named bucket. If `cf:bucket` reports `Please enable R2 through the Cloudflare Dashboard` (code 10042), activation must be completed in the dashboard first. Then retry the deployment; no firmware settings need changing.
 
 If installation fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, pnpm is rejecting dependencies published within its default 24-hour waiting period. `pnpm-workspace.yaml` lists exact-version exceptions for the Next.js and Cloudflare dependency versions already used in the verified build, including platform-specific SWC packages. These exceptions do not apply to future versions or unrelated packages. Keep the workspace file committed with the lockfile so a fresh CI install uses the same policy.
 
@@ -87,7 +91,7 @@ pnpm test
 pnpm run typecheck
 pnpm run cf:build
 pnpm exec wrangler deploy --config wrangler.jsonc --dry-run
-pnpm exec wrangler deploy --config wrangler.firmware.jsonc --dry-run --containers-rollout none
+pnpm run cf:deploy:firmware --dry-run --containers-rollout none
 ```
 
 The final command validates the firmware Worker bundle while skipping Docker image construction. For a complete local Cloudflare preview with Docker running:
@@ -104,6 +108,6 @@ Both Wrangler sessions must use the same local development registry so the servi
 
 ## Verification performed
 
-25 automated tests cover request validation, source resolution, cache invalidation, property-order equivalence, persistent result reuse, simultaneous identical requests, serialization, retry after failure, configuration generation, and upload protocol behavior. TypeScript and the OpenNext Cloudflare build pass. Wrangler dry runs validate both Worker bundles.
+26 automated tests cover request validation, source resolution, cache invalidation, property-order equivalence, persistent result reuse, simultaneous identical requests, serialization, retry after failure, configuration generation, upload protocol behavior, and firmware deployment identity inside a website CI job. TypeScript and the OpenNext Cloudflare build pass. Wrangler dry runs validate both Worker bundles.
 
-The compiler HTTP service was exercised against the local R2 emulator: V15.6/HW5 compiled to 181,796 bytes of flash and 5,234 bytes of RAM; a second request with reordered identical settings returned a cache hit without invoking the compiler. Docker image construction and a live Cloudflare deployment still require acceptance testing because Docker is unavailable on this machine. No live deployment has been performed.
+The compiler HTTP service was exercised against the local R2 emulator: V15.6/HW5 compiled to 181,796 bytes of flash and 5,234 bytes of RAM; a second request with reordered identical settings returned a cache hit without invoking the compiler. The supplied Workers Builds log confirms successful Docker image construction, including Arduino CLI and library installation. Live deployment and a firmware request through the deployed website still require acceptance testing; the logged deployment stopped at the missing R2 bucket.
