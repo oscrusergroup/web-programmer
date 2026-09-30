@@ -8,7 +8,7 @@
     "predev": "node scripts/prepare-development.mjs",
     "dev": "next dev --webpack --hostname 0.0.0.0",
     "prebuild": "node scripts/prepare-development.mjs",
-    "build": "next build --webpack",
+    "build": "node scripts/build.mjs",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
     "pretest": "pnpm run setup:firmware",

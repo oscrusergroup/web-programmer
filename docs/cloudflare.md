@@ -42,7 +42,9 @@ For Cloudflare Workers Builds, open `cartreader-web-programmer` in **Workers & P
 | Build command | `pnpm run cf:build` |
 | Deploy command | `pnpm run cf:deploy:firmware && pnpm run cf:deploy:web` |
 
-`cf:build` runs Next.js and generates the OpenNext configuration and Worker bundle under `.open-next/`. The ordinary `pnpm run build` only produces the Node deployment under `.next/`; pairing it with Wrangler fails with `Could not find compiled Open Next config, did you run the build command?`.
+`cf:build` runs Next.js and generates the OpenNext configuration and Worker bundle under `.open-next/`. The default `pnpm run build` also detects Cloudflare's `WORKERS_CI=1` environment and runs this adapter automatically, so the dashboard's default build command works. During the adapter's internal build, the script sets `CARTREADER_NEXT_BUILD=1` to prevent recursion. This works whether or not build variables already set `FIRMWARE_BACKEND=cloudflare`. Outside Workers Builds, `pnpm run build` produces the Node deployment under `.next/`; use `cf:build` explicitly when preparing a Cloudflare bundle locally.
+
+For website-only updates after the firmware service is deployed, `pnpm exec wrangler deploy` can publish the website after either Cloudflare build command. The full deploy command in the table also publishes the firmware service and container; the default Wrangler deploy command only publishes the website.
 
 The deploy command publishes the private firmware service and compiler image before the website, so its `FIRMWARE_SERVICE` binding can resolve. Workers Builds can build the Dockerfile in its own environment; local Docker is only needed when deploying the container from your computer. See [Cloudflare's Containers deployment guide](https://developers.cloudflare.com/containers/guides/deploy/).
 

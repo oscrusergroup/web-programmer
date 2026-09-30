@@ -20,7 +20,7 @@ The interface still works before compiler setup, but building is disabled with s
 
 [`firmware-source.mjs`](firmware-source.mjs) records the repository URL and `HEAD`, which follows the latest commit on the upstream default branch. Firmware source is fetched as a dependency; it is not tracked in this application's repository.
 
-`pnpm run dev`, `pnpm run build`, and `pnpm test` automatically run `setup:firmware`. Every setup run fetches the latest remote `HEAD` into the ignored `.firmware-cache/cartreader/` directory, checking out the `Cart_Reader` sketch, README and license. Network access is required; an update check failure stops setup instead of silently using stale firmware. To fetch it explicitly:
+For local Node hosting, `pnpm run dev`, `pnpm run build`, and `pnpm test` automatically run `setup:firmware`. Every setup run fetches the latest remote `HEAD` into the ignored `.firmware-cache/cartreader/` directory, checking out the `Cart_Reader` sketch, README and license. Cloudflare builds use the firmware service and skip this local checkout. Network access is required; an update check failure stops setup instead of silently using stale firmware. To fetch it explicitly:
 
 ```sh
 pnpm run setup:firmware
@@ -66,7 +66,7 @@ pnpm run cf:deploy
 
 Create the bucket once; subsequent deploys reuse it. See [Cloudflare deployment instructions](docs/cloudflare.md) for bindings, GitHub token setup, preview commands, cache behavior and verification limits. Local Node development also caches successful builds under `.firmware-cache/builds/`.
 
-For a Git-connected Cloudflare build, set **Build command** to `pnpm run cf:build` and **Deploy command** to `pnpm run cf:deploy:firmware && pnpm run cf:deploy:web`. Enable Workers Paid and R2 and create the cache bucket first. The default `pnpm run build` does not generate the OpenNext bundle required by Cloudflare; see [Workers Builds setup](docs/cloudflare.md#deploy-from-a-connected-git-repository).
+For a Git-connected Cloudflare build, set **Build command** to `pnpm run cf:build` and **Deploy command** to `pnpm run cf:deploy:firmware && pnpm run cf:deploy:web`. The default `pnpm run build` also generates the OpenNext bundle when Cloudflare sets `WORKERS_CI=1`. Enable Workers Paid and R2 and create the cache bucket first; see [Workers Builds setup](docs/cloudflare.md#deploy-from-a-connected-git-repository).
 
 ## Host on a persistent Node server
 
