@@ -3,9 +3,19 @@ import type { FirmwareProject } from "../firmware";
 
 export function cloudflareService() {
   if (process.env.FIRMWARE_BACKEND !== "cloudflare") return null;
-  const env = getCloudflareContext().env as unknown as { FIRMWARE_SERVICE?: { fetch(request: Request): Promise<Response> } };
+  const env = getCloudflareContext().env as unknown as { FIRMWARE_SERVICE?: { fetch(url: string, init?: RequestInit): Promise<Response> } };
   if (!env.FIRMWARE_SERVICE) throw new Error("Missing FIRMWARE_SERVICE binding. Check wrangler.jsonc.");
-  return env.FIRMWARE_SERVICE;
+  const binding = env.FIRMWARE_SERVICE;
+  return {
+    fetch(request: Request) {
+      // Next.js request wrappers are not native Workers Requests. An explicit
+      // URL and init preserve the method, origin, headers and streamed body.
+      return binding.fetch(request.url, {
+        method: request.method, headers: request.headers,
+        body: request.body, redirect: request.redirect,
+      });
+    },
+  };
 }
 export async function backendProject() {
   const service = cloudflareService();

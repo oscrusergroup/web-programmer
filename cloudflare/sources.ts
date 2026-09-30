@@ -6,7 +6,8 @@ import type { BuildStore } from "./build-cache";
 
 type Timed<T> = { at: number; value: T };
 export class FirmwareSources {
-  constructor(private store: BuildStore, private githubToken?: string, private fetcher: typeof fetch = fetch) {}
+  // Workers' global fetch rejects calls with a FirmwareSources receiver.
+  constructor(private store: BuildStore, private githubToken?: string, private fetcher: typeof fetch = (...args) => fetch(...args)) {}
   private async upstream(url: string, init: RequestInit = {}) {
     const headers = new Headers(init.headers);
     headers.set("User-Agent", "cartreader-web-programmer");

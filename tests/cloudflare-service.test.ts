@@ -18,6 +18,25 @@ class MemoryStore {
 const source = await readFile(path.join(firmwareSketchPath(), "Config.h"), "utf8");
 const revision = "a".repeat(40);
 
+test("default upstream fetch loads firmware with the global receiver required by Workers", async () => {
+  const originalFetch = globalThis.fetch;
+  globalThis.fetch = async function (this: unknown, input, init) {
+    if (this !== undefined && this !== globalThis)
+      throw new TypeError("Illegal invocation: function called with incorrect this reference.");
+    const url = String(input);
+    assert.equal(new Headers(init?.headers).get("User-Agent"), "cartreader-web-programmer");
+    return url.startsWith("https://api.github.com/")
+      ? Response.json({ sha: revision })
+      : new Response(url.endsWith("Config.h") ? source : 'FSTRING_VERSION[] = "V15.6";');
+  };
+  try {
+    const sources = new FirmwareSources(new MemoryStore());
+    assert.equal((await sources.project()).revision, revision);
+  } finally {
+    globalThis.fetch = originalFetch;
+  }
+});
+
 test("latest source refreshes HEAD and retains older project snapshots without leaking API credentials", async () => {
   const store = new MemoryStore();
   let current = revision, commitRequests = 0;
