@@ -2,5 +2,6 @@
   "name": "cartreader-cloudflare-compiler",
   "private": true,
   "type": "module",
+  "packageManager": "pnpm@12.6.0",
   "dependencies": { "tsx": "4.22.4" }
 }

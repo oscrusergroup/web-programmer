@@ -17,13 +17,13 @@ flowchart LR
 
 ## First deployment
 
-Install Node.js 22 or newer and run Docker locally. Wrangler builds a Linux container image; Docker Desktop can build it on an Apple Silicon Mac. The image installs the compiler and libraries during deployment, rather than per firmware request. Local `setup:arduino` is not required for a Cloudflare deployment.
+Install Node.js 22 or newer and pnpm 12.6.0, and run Docker locally. The package manager version is pinned in `package.json`; Corepack can install it with `corepack enable` and `corepack prepare pnpm@12.6.0 --activate`. Wrangler builds a Linux container image; Docker Desktop can build it on an Apple Silicon Mac. The image installs the compiler and libraries during deployment, rather than per firmware request. Local `setup:arduino` is not required for a Cloudflare deployment.
 
 ```sh
-npm ci
-npx wrangler login
-npm run cf:bucket
-npm run cf:deploy
+pnpm install --frozen-lockfile
+pnpm exec wrangler login
+pnpm run cf:bucket
+pnpm run cf:deploy
 ```
 
 `cf:bucket` creates `cartreader-build-cache` once. Reuse the existing bucket on subsequent deployments. The deploy command first publishes the private firmware Worker and compiler image, then builds and publishes the website. Wrangler reports the website's HTTPS URL. Initial container provisioning can take a few minutes.
@@ -32,12 +32,28 @@ Resources are configured in `wrangler.jsonc` (website) and `wrangler.firmware.js
 
 For automation, provide `CLOUDFLARE_ACCOUNT_ID` and a Cloudflare API token through your CI secret store with permission to deploy Workers, Containers/registry images, Durable Objects, and the R2 bucket. Keep a Docker daemon available to the deploy job. This repository does not include account IDs or credentials.
 
+## Deploy from a connected Git repository
+
+For Cloudflare Workers Builds, open `cartreader-web-programmer` in **Workers & Pages > Settings > Build** and use:
+
+| Setting | Value |
+| --- | --- |
+| Root directory | `/` |
+| Build command | `pnpm run cf:build` |
+| Deploy command | `pnpm run cf:deploy:firmware && pnpm run cf:deploy:web` |
+
+`cf:build` runs Next.js and generates the OpenNext configuration and Worker bundle under `.open-next/`. The ordinary `pnpm run build` only produces the Node deployment under `.next/`; pairing it with Wrangler fails with `Could not find compiled Open Next config, did you run the build command?`.
+
+The deploy command publishes the private firmware service and compiler image before the website, so its `FIRMWARE_SERVICE` binding can resolve. Workers Builds can build the Dockerfile in its own environment; local Docker is only needed when deploying the container from your computer. See [Cloudflare's Containers deployment guide](https://developers.cloudflare.com/containers/guides/deploy/).
+
+Before retrying the build, enable Workers Paid and R2 in the dashboard, then create `cartreader-build-cache` once through the dashboard or `pnpm run cf:bucket`. The build token must have permission to deploy both Workers, their Durable Object namespace, and Containers/registry images, and to access the R2 bucket. Cloudflare build settings are stored in the dashboard; changing this repository does not update an existing trigger's commands. See [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
+
 ## GitHub and custom domains
 
 Anonymous GitHub API calls have low rate limits. Add a read-only GitHub token to the firmware Worker for a public installation:
 
 ```sh
-npx wrangler secret put GITHUB_TOKEN --config wrangler.firmware.jsonc
+pnpm exec wrangler secret put GITHUB_TOKEN --config wrangler.firmware.jsonc
 ```
 
 The token is sent only to `api.github.com`; it is never sent to browsers, raw source downloads, or the compiler. Latest repository HEAD is resolved again after a 60-second metadata cache. Published releases and release refs refresh after five minutes. Resolved source projects remain available by exact commit so a visitor can build the version they configured even after upstream changes.
@@ -63,24 +79,24 @@ Cached builds have no application expiry. Do not add an R2 expiration rule to `b
 ## Local checks and preview
 
 ```sh
-npm test
-npm run typecheck
-npm run cf:build
-npx wrangler deploy --config wrangler.jsonc --dry-run
-npx wrangler deploy --config wrangler.firmware.jsonc --dry-run --containers-rollout none
+pnpm test
+pnpm run typecheck
+pnpm run cf:build
+pnpm exec wrangler deploy --config wrangler.jsonc --dry-run
+pnpm exec wrangler deploy --config wrangler.firmware.jsonc --dry-run --containers-rollout none
 ```
 
 The final command validates the firmware Worker bundle while skipping Docker image construction. For a complete local Cloudflare preview with Docker running:
 
 ```sh
 # Terminal 1: private firmware Worker, local R2 and compiler container
-npm run cf:dev:firmware
+pnpm run cf:dev:firmware
 
 # Terminal 2: the already-built website Worker
-npm run cf:preview
+pnpm run cf:preview
 ```
 
-Both Wrangler sessions must use the same local development registry so the service binding resolves. The preview uses local R2 rather than production data. A local GitHub token can be placed in `.dev.vars` for the firmware Worker; these files are ignored by Git. Ordinary `npm run dev` continues to use the local Node compiler, requiring `npm run setup:arduino`.
+Both Wrangler sessions must use the same local development registry so the service binding resolves. The preview uses local R2 rather than production data. A local GitHub token can be placed in `.dev.vars` for the firmware Worker; these files are ignored by Git. Ordinary `pnpm run dev` continues to use the local Node compiler, requiring `pnpm run setup:arduino`.
 
 ## Verification performed
 

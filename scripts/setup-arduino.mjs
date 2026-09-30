@@ -80,4 +80,4 @@ await writeFile(
   ),
 );
 await rm(path.join(tools, archive));
-console.log("Compiler ready. Run npm run dev to open the web programmer.");
+console.log("Compiler ready. Run pnpm run dev to open the web programmer.");

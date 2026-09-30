@@ -61,7 +61,7 @@ async function compileUncached(values: Selection, revision: string) {
   const config = generateConfig(project.source, project.schema, values);
   if (!(await compilerReady()))
     throw new BuildError(
-      "The server compiler is not installed. The host must run npm run setup:arduino.",
+      "The server compiler is not installed. The host must run pnpm run setup:arduino.",
       503,
     );
   if (compilerState.cartreaderBuilding)

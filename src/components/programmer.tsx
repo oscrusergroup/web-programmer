@@ -563,7 +563,7 @@ export function Programmer(initialProject: FirmwareProject) {
                   )}
                   {compiler === false && (
                     <div className="mt-3 text-xs leading-5 text-amber-800">
-                      The host must run <code>npm run setup:arduino</code>.
+                      The host must run <code>pnpm run setup:arduino</code>.
                       <button
                         onClick={checkCompiler}
                         className="ml-1 underline"
