@@ -4,11 +4,15 @@
   "private": true,
   "type": "module",
   "scripts": {
+    "predev": "npm run setup:firmware",
     "dev": "next dev --webpack --hostname 0.0.0.0",
+    "prebuild": "npm run setup:firmware",
     "build": "next build --webpack",
     "start": "next start --hostname 0.0.0.0",
     "typecheck": "tsc --noEmit",
+    "pretest": "npm run setup:firmware",
     "test": "node --import tsx --test tests/*.test.ts",
+    "setup:firmware": "node scripts/setup-firmware.mjs",
     "setup:arduino": "node scripts/setup-arduino.mjs"
   },
   "dependencies": {

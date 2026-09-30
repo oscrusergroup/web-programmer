@@ -2,6 +2,7 @@ node_modules/
 .next/
 .tools/
 .arduino/
+.firmware-cache/
 *.tsbuildinfo
 .env*
 !.env.example

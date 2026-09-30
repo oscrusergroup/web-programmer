@@ -1,6 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import path from "node:path";
+import { firmwareSketchPath } from "../src/lib/firmware-path.mjs";
 import {
   parseConfig,
   defaultSelection,
@@ -8,7 +10,7 @@ import {
   validateSelection,
 } from "../src/lib/config";
 
-const source = readFileSync("arduino-code/Cart_Reader/Config.h", "utf8");
+const source = readFileSync(path.join(firmwareSketchPath(), "Config.h"), "utf8");
 test("parses actual options without documentation examples or derived defines", () => {
   const schema = parseConfig(source);
   assert.equal(schema.filter((o) => o.key === "HW5").length, 1);

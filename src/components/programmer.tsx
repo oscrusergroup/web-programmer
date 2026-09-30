@@ -28,7 +28,6 @@ import {
   validateSelection,
   generateConfig,
   configurationWarnings,
-  type ConfigOption,
   type Selection,
 } from "@/lib/config";
 import {
@@ -38,6 +37,7 @@ import {
 } from "@/lib/serial/web-serial";
 import { HardwareFields, CoreFields, OptionFields } from "./config-fields";
 import { BoardArt } from "./board-art";
+import type { FirmwareProject, FirmwareRelease } from "@/lib/firmware";
 
 type Build = {
   hex: string;
@@ -63,15 +63,15 @@ function download(name: string, content: string) {
   setTimeout(() => URL.revokeObjectURL(url), 1000);
 }
 
-export function Programmer({
-  source,
-  schema,
-  version,
-}: {
-  source: string;
-  schema: ConfigOption[];
-  version: string;
-}) {
+export function Programmer(initialProject: FirmwareProject) {
+  const [project, setProject] = useState(initialProject);
+  const { source, schema, version, revision } = project;
+  const [firmwareId, setFirmwareId] = useState("latest");
+  const [releases, setReleases] = useState<FirmwareRelease[]>([]);
+  const [releaseError, setReleaseError] = useState("");
+  const [loadingReleases, setLoadingReleases] = useState(true);
+  const [sourceError, setSourceError] = useState("");
+  const [firmwareReady, setFirmwareReady] = useState(true);
   const [values, setValues] = useState<Selection>(() =>
     defaultSelection(schema),
   );
@@ -79,7 +79,7 @@ export function Programmer({
     [supported, setSupported] = useState<boolean | null>(null);
   const [compiler, setCompiler] = useState<boolean | null>(null),
     [build, setBuild] = useState<Build | null>(null);
-  const [busy, setBusy] = useState<"build" | "upload" | null>(null),
+  const [busy, setBusy] = useState<"build" | "upload" | "source" | null>(null),
     [error, setError] = useState("");
   const [log, setLog] = useState(""),
     [phase, setPhase] = useState(""),
@@ -96,6 +96,47 @@ export function Programmer({
   ).length;
   const errors = validateSelection(schema, values),
     warnings = configurationWarnings(values);
+  async function loadReleases() {
+    setLoadingReleases(true);
+    setReleaseError("");
+    try {
+      const response = await fetch("/api/releases");
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load releases.");
+      setReleases(data.releases);
+    } catch (error) {
+      setReleaseError(error instanceof Error ? error.message : "Could not load releases.");
+    } finally { setLoadingReleases(false); }
+  }
+  async function selectFirmware(id: string) {
+    if (activeOperation.current) return;
+    activeOperation.current = true;
+    setFirmwareId(id);
+    setFirmwareReady(false);
+    setBusy("source");
+    setElapsed(0);
+    setPhase("Loading firmware options");
+    setSourceError("");
+    setBuild(null);
+    setUploaded(false);
+    setError("");
+    setLog("");
+    setShowLog(false);
+    try {
+      const response = await fetch(`/api/firmware?source=${encodeURIComponent(id)}`);
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not load firmware.");
+      setProject(data);
+      setValues(defaultSelection(data.schema));
+      setStep(0);
+      setFirmwareReady(true);
+    } catch (error) {
+      setSourceError(error instanceof Error ? error.message : "Could not load firmware.");
+    } finally {
+      activeOperation.current = false;
+      setBusy(null);
+    }
+  }
   async function checkCompiler() {
     try {
       const response = await fetch("/api/health");
@@ -109,6 +150,7 @@ export function Programmer({
   useEffect(() => {
     setSupported(!!serialAPI() && window.isSecureContext);
     void checkCompiler();
+    void loadReleases();
     const api = serialAPI();
     const disconnected = (event: Event) => {
       setPort((current) => (event.target === current ? null : current));
@@ -164,7 +206,7 @@ export function Programmer({
     setShowLog(false);
   }
   async function buildFirmware() {
-    if (errors.length || activeOperation.current) return;
+    if (!firmwareReady || errors.length || activeOperation.current) return;
     activeOperation.current = true;
     setBusy("build");
     setElapsed(0);
@@ -177,7 +219,7 @@ export function Programmer({
       const response = await fetch("/api/build", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify(values),
+        body: JSON.stringify({ values, revision }),
       });
       const data = await response.json();
       if (data.log) setLog(data.log);
@@ -244,7 +286,7 @@ export function Programmer({
       setBusy(null);
     }
   }
-  const fields = { schema, values, onChange: update, disabled: !!busy };
+  const fields = { schema, values, onChange: update, disabled: !!busy || !firmwareReady };
   return (
     <div className="min-h-screen">
       <header className="border-b border-slate-200 bg-white">
@@ -293,7 +335,7 @@ export function Programmer({
               <span className="h-1.5 w-1.5 rounded-full bg-accent" />
               Open Source Cartridge Reader
               <span className="ml-1 rounded bg-[#e7edf7] px-2 py-0.5 font-mono text-[10px]">
-                {version}
+                {firmwareReady ? version : "Loading source"}
               </span>
             </div>
             <h1 className="text-[29px] leading-tight font-semibold tracking-[-1.2px] sm:text-[38px]">
@@ -316,6 +358,40 @@ export function Programmer({
                 : "Compiler setup needed"}
           </div>
         </div>
+        <section className="panel mb-5 p-5 sm:p-6" aria-labelledby="firmware-source-heading">
+          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
+            <div className="max-w-lg">
+              <h2 id="firmware-source-heading" className="text-sm font-semibold">Firmware source</h2>
+              <p className="mt-1 text-xs leading-5 text-muted">
+                Use the latest repository code or choose a published release.
+                Changing versions resets your configuration and previous build.
+              </p>
+            </div>
+            <div className="w-full sm:max-w-xs">
+              <label htmlFor="firmware-source" className="sr-only">Firmware version</label>
+              <select id="firmware-source" value={firmwareId} disabled={!!busy}
+                onChange={event => void selectFirmware(event.target.value)}
+                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50">
+                <option value="latest">Latest repository code</option>
+                {releases.length > 0 && <optgroup label="Published releases">
+                  {releases.map(release => <option key={release.id} value={release.id}>
+                    {release.label}{release.tag !== release.label ? ` (${release.tag})` : ""}{release.prerelease ? " — prerelease" : ""}
+                  </option>)}
+                </optgroup>}
+              </select>
+              {loadingReleases && <p role="status" className="mt-2 text-xs text-muted">Loading releases…</p>}
+              {!loadingReleases && !releaseError && !releases.length && <p className="mt-2 text-xs text-muted">No published releases available.</p>}
+              {releaseError && <p role="alert" className="mt-2 text-xs leading-5 text-amber-800">{releaseError}{" "}
+                <button onClick={() => void loadReleases()} className="font-medium underline">Retry release list</button>
+              </p>}
+              {firmwareReady && <p className="mt-2 font-mono text-[10px] text-muted">{version} · {revision.slice(0, 12)}</p>}
+            </div>
+          </div>
+          {sourceError && <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-xs leading-5 text-red-800">{sourceError}{" "}
+            <button disabled={!!busy} onClick={() => void selectFirmware(firmwareId)} className="font-medium underline">Retry version</button>
+          </div>}
+          {busy === "source" && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin" />Loading firmware options…</p>}
+        </section>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_350px]">
           <section
             className="panel overflow-hidden"
@@ -368,7 +444,7 @@ export function Programmer({
             <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 sm:px-7">
               <button
                 onClick={restore}
-                disabled={!!busy}
+                disabled={!!busy || !firmwareReady}
                 className="flex items-center gap-2 text-xs text-muted hover:text-ink disabled:opacity-40"
               >
                 <RotateCcw size={13} />
@@ -385,7 +461,7 @@ export function Programmer({
               ) : (
                 <button
                   className="flex items-center gap-2 text-xs font-semibold text-accent disabled:opacity-40"
-                  disabled={!!busy || !!errors.length}
+                  disabled={!!busy || !firmwareReady || !!errors.length}
                   onClick={() =>
                     download("Config.h", generateConfig(source, schema, values))
                   }
@@ -407,7 +483,7 @@ export function Programmer({
                     Your firmware
                   </h2>
                   <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-muted">
-                    {version}
+                    {firmwareReady ? version : "Loading source"}
                   </span>
                 </div>
                 <p className="mt-1 text-xs text-muted">
@@ -476,7 +552,7 @@ export function Programmer({
                   )}
                   <button
                     onClick={buildFirmware}
-                    disabled={!!busy || !!errors.length || compiler !== true}
+                    disabled={!!busy || !firmwareReady || !!errors.length || compiler !== true}
                     className="button-primary w-full"
                   >
                     {busy === "build" ? (
@@ -552,7 +628,7 @@ export function Programmer({
                 {build && (
                   <button
                     onClick={() =>
-                      download(`OSCR-${version}-${hardware}.hex`, build.hex)
+                      download(`OSCR-${firmwareReady ? version : "Loading source"}-${hardware}.hex`, build.hex)
                     }
                     disabled={!!busy}
                     className="mt-3 flex w-full items-center justify-center gap-1.5 text-[11px] text-muted hover:text-accent"
@@ -618,8 +694,9 @@ export function Programmer({
                 </div>
               ) : (
                 <p className="mt-2 text-xs text-muted">
-                  Compiling the selected cores and libraries. The first build
-                  can take a few minutes.
+                  {busy === "source"
+                    ? "Downloading the selected source and reading its Config.h options. The first download can take a minute."
+                    : "Compiling the selected cores and libraries. The first build can take a few minutes."}
                 </p>
               )}
             </div>

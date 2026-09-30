@@ -3,7 +3,7 @@ import { tmpdir } from "node:os";
 import path from "node:path";
 import { createHash } from "node:crypto";
 import { generateConfig, type Selection } from "../config";
-import { getProject, sketchPath } from "./project";
+import { getPreparedProject, preparedSketchPath } from "./project";
 import { runCommand, CommandError } from "./run-command";
 
 export const FQBN = "arduino:avr:mega:cpu=atmega2560";
@@ -38,8 +38,9 @@ export async function compilerReady() {
     return false;
   }
 }
-export async function compile(values: Selection) {
-  const project = await getProject();
+export async function compile(values: Selection, revision: string) {
+  const project = await getPreparedProject(revision);
+  const sketchPath = preparedSketchPath(revision);
   const config = generateConfig(project.source, project.schema, values);
   if (!(await compilerReady()))
     throw new BuildError(
@@ -111,10 +112,11 @@ export async function compile(values: Selection) {
       ramBytes,
       duration: Date.now() - started,
       fingerprint: createHash("sha256")
-        .update(config)
+        .update(revision).update(config)
         .digest("hex")
         .slice(0, 12),
       version: project.version,
+      revision,
     };
   } finally {
     try {

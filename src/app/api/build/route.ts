@@ -1,5 +1,5 @@
 import { compile, BuildError } from "@/lib/server/compiler";
-import { getProject } from "@/lib/server/project";
+import { getPreparedProject, FirmwareError } from "@/lib/server/project";
 import { validateSelection, type Selection } from "@/lib/config";
 export const runtime = "nodejs";
 export const maxDuration = 300;
@@ -47,12 +47,16 @@ export async function POST(request: Request) {
       }
       parts.push(value);
     }
-    const values: unknown = JSON.parse(Buffer.concat(parts).toString("utf8"));
-    const { schema } = await getProject();
+    const payload: unknown = JSON.parse(Buffer.concat(parts).toString("utf8"));
+    if (!payload || typeof payload !== "object" || Array.isArray(payload) ||
+        !("revision" in payload) || typeof payload.revision !== "string" || !("values" in payload))
+      return Response.json({ error: "Select a firmware version and provide its configuration." }, { status: 400 });
+    const { values, revision } = payload;
+    const { schema } = await getPreparedProject(revision);
     const errors = validateSelection(schema, values);
     if (errors.length)
       return Response.json({ error: errors.join("\n") }, { status: 400 });
-    return Response.json(await compile(values as Selection), {
+    return Response.json(await compile(values as Selection, revision), {
       headers: { "Cache-Control": "no-store" },
     });
   } catch (error) {
@@ -61,6 +65,8 @@ export async function POST(request: Request) {
         { error: "Invalid JSON configuration." },
         { status: 400 },
       );
+    if (error instanceof FirmwareError)
+      return Response.json({ error: error.message }, { status: error.status });
     if (error instanceof BuildError)
       return Response.json(
         { error: error.message, log: error.log },
