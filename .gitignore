@@ -1,0 +1,8 @@
+node_modules/
+.next/
+.tools/
+.arduino/
+*.tsbuildinfo
+.env*
+!.env.example
+.DS_Store

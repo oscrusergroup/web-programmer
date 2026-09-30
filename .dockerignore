@@ -1,0 +1,9 @@
+node_modules
+.next
+.arduino
+.tools
+.git
+.env*
+*.tsbuildinfo
+.DS_Store
+docs/screenshots
