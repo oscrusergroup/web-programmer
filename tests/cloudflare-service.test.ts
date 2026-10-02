@@ -18,6 +18,77 @@ class MemoryStore {
 const source = await readFile(path.join(firmwareSketchPath(), "Config.h"), "utf8");
 const revision = "a".repeat(40);
 
+function gitAdvertisement(records: string[]) {
+  const packet = (value: string) => (Buffer.byteLength(value) + 4).toString(16).padStart(4, "0") + value;
+  return packet("# service=git-upload-pack\n") + "0000" + records.map(packet).join("") + "0000";
+}
+
+for (const status of [403, 429]) test(`latest firmware loads and follows HEAD when the GitHub API returns ${status}`, async () => {
+  const store = new MemoryStore();
+  let current = revision;
+  const sources = new FirmwareSources(store, "test-token", async (input, init) => {
+    const url = String(input);
+    const headers = new Headers(init?.headers);
+    if (url === "https://api.github.com/repos/sanni/cartreader/commits/HEAD")
+      return new Response("API rate limit exceeded", { status });
+    assert.equal(headers.get("Authorization"), null, "API credentials must not reach public Git or raw hosts");
+    if (url === "https://github.com/sanni/cartreader.git/info/refs?service=git-upload-pack")
+      return new Response(gitAdvertisement([
+        `${current} HEAD\0multi_ack symref=HEAD:refs/heads/main\n`,
+        `${current} refs/heads/main\n`,
+      ]), { headers: { "Content-Type": "application/x-git-upload-pack-advertisement" } });
+    assert.ok(url.startsWith(`https://raw.githubusercontent.com/sanni/cartreader/${current}/Cart_Reader/`));
+    return new Response(url.endsWith("Config.h") ? source : 'FSTRING_VERSION[] = "V15.6";');
+  });
+  assert.equal((await sources.project()).revision, revision);
+  current = "b".repeat(40);
+  await store.put("metadata/latest.json", JSON.stringify({ at: 0, value: revision }));
+  assert.equal((await sources.project()).revision, "b".repeat(40));
+  assert.equal((await sources.prepared(revision)).revision, revision);
+});
+
+test("release fallback uses the peeled commit of an annotated published tag", async () => {
+  const store = new MemoryStore();
+  await store.put("metadata/releases.json", JSON.stringify({ at: Date.now(), value: [
+    { id: "release:V15.5", tag: "V15.5", label: "V15.5", prerelease: false },
+  ] }));
+  const sources = new FirmwareSources(store, undefined, async input => {
+    const url = String(input);
+    if (url.startsWith("https://api.github.com/")) return new Response("Rate limited", { status: 403 });
+    if (url.startsWith("https://github.com/")) return new Response(gitAdvertisement([
+      `${revision} HEAD\0multi_ack\n`,
+      `${"c".repeat(40)} refs/tags/V15.5\n`,
+      `${"b".repeat(40)} refs/tags/V15.5^{}\n`,
+    ]), { headers: { "Content-Type": "application/x-git-upload-pack-advertisement" } });
+    assert.ok(url.includes(`/${"b".repeat(40)}/Cart_Reader/`));
+    return new Response(url.endsWith("Config.h") ? source : 'FSTRING_VERSION[] = "V15.5";');
+  });
+  assert.equal((await sources.project("release:V15.5")).revision, "b".repeat(40));
+  await assert.rejects(sources.project("release:unpublished"), /published release/);
+});
+
+test("Git fallback rejects malformed or incomplete ref advertisements without caching a revision", async () => {
+  const valid = gitAdvertisement([`${revision} HEAD\0multi_ack\n`]);
+  for (const body of ["<html>Upstream unavailable</html>", valid.slice(0, -4), valid + "ffffshort", gitAdvertisement([`${revision} refs/heads/HEAD\0multi_ack\n`])]) {
+    const store = new MemoryStore();
+    const sources = new FirmwareSources(store, undefined, async input => String(input).startsWith("https://api.github.com/")
+      ? new Response("Rate limited", { status: 403 })
+      : new Response(body, { headers: { "Content-Type": "application/x-git-upload-pack-advertisement" } }));
+    await assert.rejects(sources.project(), /GitHub returned an invalid Git ref advertisement/);
+    assert.equal(store.data.size, 0);
+  }
+});
+
+test("missing GitHub revisions remain errors instead of invoking the throttling fallback", async () => {
+  let gitRequests = 0;
+  const sources = new FirmwareSources(new MemoryStore(), undefined, async input => {
+    if (String(input).startsWith("https://github.com/")) gitRequests++;
+    return new Response("Not found", { status: 404 });
+  });
+  await assert.rejects(sources.project(), /404/);
+  assert.equal(gitRequests, 0);
+});
+
 test("default upstream fetch loads firmware with the global receiver required by Workers", async () => {
   const originalFetch = globalThis.fetch;
   globalThis.fetch = async function (this: unknown, input, init) {

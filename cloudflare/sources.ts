@@ -3,8 +3,14 @@ import { projectFromSource } from "../src/lib/project-config";
 import { FirmwareError } from "../src/lib/errors";
 import type { FirmwareProject, FirmwareRelease } from "../src/lib/firmware";
 import type { BuildStore } from "./build-cache";
+import { gitRevision } from "./git-refs";
 
 type Timed<T> = { at: number; value: T };
+class GitHubError extends FirmwareError {
+  constructor(readonly upstreamStatus: number) {
+    super(`GitHub could not load this firmware (${upstreamStatus}). Please try again shortly.`, 502);
+  }
+}
 export class FirmwareSources {
   // Workers' global fetch rejects calls with a FirmwareSources receiver.
   constructor(private store: BuildStore, private githubToken?: string, private fetcher: typeof fetch = (...args) => fetch(...args)) {}
@@ -14,8 +20,31 @@ export class FirmwareSources {
     // Send credentials only to the GitHub API, never the raw source host.
     if (url.startsWith("https://api.github.com/") && this.githubToken) headers.set("Authorization", `Bearer ${this.githubToken}`);
     const response = await this.fetcher(url, { ...init, headers, signal: AbortSignal.timeout(20_000) });
-    if (!response.ok) throw new FirmwareError(`GitHub could not load this firmware (${response.status}). Please try again shortly.`, 502);
+    if (!response.ok) throw new GitHubError(response.status);
     return response;
+  }
+  private async revision(id: string): Promise<string> {
+    const ref = id === "latest" ? "HEAD" : id.slice("release:".length);
+    try {
+      const response = await this.upstream(`https://api.github.com/repos/sanni/cartreader/commits/${encodeURIComponent(ref)}`, {
+        headers: { Accept: "application/vnd.github+json" },
+      });
+      const data = await response.json() as { sha?: unknown };
+      if (typeof data.sha !== "string" || !/^[a-f0-9]{40}$/.test(data.sha))
+        throw new FirmwareError("GitHub returned an invalid firmware revision.", 502);
+      return data.sha;
+    } catch (error) {
+      if (!(error instanceof GitHubError) || ![403, 429].includes(error.upstreamStatus)) throw error;
+      // Public Git ref discovery does not consume the REST API quota. It
+      // resolves current HEAD without substituting a stale cached revision.
+      const response = await this.upstream("https://github.com/sanni/cartreader.git/info/refs?service=git-upload-pack", {
+        headers: { Accept: "application/x-git-upload-pack-advertisement" },
+        cache: "no-store",
+      });
+      if (response.headers.get("Content-Type")?.split(";")[0].trim() !== "application/x-git-upload-pack-advertisement")
+        throw new FirmwareError("GitHub returned an invalid Git ref advertisement.", 502);
+      return gitRevision(await response.arrayBuffer(), id === "latest" ? "HEAD" : `refs/tags/${ref}`);
+    }
   }
   async releases(): Promise<FirmwareRelease[]> {
     const object = await this.store.get("metadata/releases.json");
@@ -35,16 +64,7 @@ export class FirmwareSources {
     const cached = object ? await object.json<Timed<string>>() : null;
     const ttl = id === "latest" ? 60_000 : 300_000;
     let revision = cached && Date.now() - cached.at < ttl ? cached.value : "";
-    if (!revision) {
-      const ref = id === "latest" ? "HEAD" : id.slice("release:".length);
-      const response = await this.upstream(`https://api.github.com/repos/sanni/cartreader/commits/${encodeURIComponent(ref)}`, {
-        headers: { Accept: "application/vnd.github+json" },
-      });
-      const data = await response.json() as { sha?: unknown };
-      if (typeof data.sha !== "string" || !/^[a-f0-9]{40}$/.test(data.sha))
-        throw new FirmwareError("GitHub returned an invalid firmware revision.", 502);
-      revision = data.sha;
-    }
+    if (!revision) revision = await this.revision(id);
     const projectKey = `projects/${revision}.json`;
     const prepared = await this.store.get(projectKey);
     let project = prepared ? await prepared.json<FirmwareProject>() : null;
