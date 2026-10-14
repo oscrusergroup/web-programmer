@@ -1,18 +1,66 @@
 @import "tailwindcss";
+@custom-variant dark (&:where([data-theme="dark"], [data-theme="dark"] *));
 @theme inline {
-  --color-ink: #172b4d;
-  --color-muted: #64748b;
-  --color-accent: #345cf0;
+  --color-ink: var(--ink);
+  --color-muted: var(--muted);
+  --color-accent: var(--accent);
+  --color-brand: var(--brand);
+  --color-surface: var(--surface);
+  --color-surface-soft: var(--surface-soft);
+  --color-surface-raised: var(--surface-raised);
+  --color-line: var(--line);
+  --color-line-soft: var(--line-soft);
+  --color-line-strong: var(--line-strong);
+  --color-selected: var(--selected);
+  --color-selected-border: var(--selected-border);
+  --color-badge: var(--badge);
   --font-sans: "Avenir Next", "Segoe UI", Arial, sans-serif;
   --font-mono: "SFMono-Regular", Consolas, monospace;
 }
 :root {
   color-scheme: light;
+  --ink: #172b4d;
+  --muted: #64748b;
+  --accent: #345cf0;
+  --brand: #345cf0;
+  --surface: #ffffff;
+  --surface-soft: #f8fafc;
+  --surface-raised: #f1f5f9;
+  --line: #e0e6ef;
+  --line-soft: #f1f5f9;
+  --line-strong: #cbd5e1;
+  --selected: #f1f5ff;
+  --selected-border: #ced9ff;
+  --badge: #e7edf7;
+  --page: #f4f7fb;
+  --primary-hover: #2549cc;
+  --disabled-background: #e7ecf4;
+  --disabled-text: #8491a5;
+}
+:root[data-theme="dark"] {
+  color-scheme: dark;
+  --ink: #f5f5f5;
+  --muted: #a3a3a3;
+  --accent: #94adff;
+  --brand: #4263dd;
+  --surface: #111111;
+  --surface-soft: #1a1a1a;
+  --surface-raised: #262626;
+  --line: #333333;
+  --line-soft: #262626;
+  --line-strong: #737373;
+  --selected: #202020;
+  --selected-border: #525252;
+  --badge: #262626;
+  --page: #000000;
+  --primary-hover: #3557d1;
+  --disabled-background: #262626;
+  --disabled-text: #a3a3a3;
 }
 body {
   margin: 0;
-  background: #f4f7fb;
-  color: #172b4d;
+  background: var(--page);
+  color: var(--ink);
   font-family: var(--font-sans);
 }
 button,
@@ -36,11 +84,11 @@ summary {
   outline-offset: 4px;
 }
 :focus-visible {
-  outline: 2px solid #345cf0;
+  outline: 2px solid var(--accent);
 }
 input[type="checkbox"],
 input[type="radio"] {
-  accent-color: #345cf0;
+  accent-color: var(--brand);
 }
 button {
   transition:
@@ -49,9 +97,9 @@ button {
     color 0.15s;
 }
 .panel {
-  border: 1px solid #e0e6ef;
+  border: 1px solid var(--line);
   border-radius: 16px;
-  background: white;
+  background: var(--surface);
 }
 .button-primary {
   display: inline-flex;
@@ -59,40 +107,36 @@ button {
   justify-content: center;
   gap: 9px;
   border-radius: 9px;
-  background: #345cf0;
+  background: var(--brand);
   color: white;
   font-size: 14px;
   font-weight: 600;
   padding: 13px 18px;
 }
 .button-primary:hover:not(:disabled) {
-  background: #2549cc;
+  background: var(--primary-hover);
 }
 .button-primary:disabled {
-  background: #e7ecf4;
-  color: #8491a5;
+  background: var(--disabled-background);
+  color: var(--disabled-text);
 }
 .button-secondary {
   display: inline-flex;
   align-items: center;
   justify-content: center;
   gap: 8px;
-  border: 1px solid #d9e1ed;
-  background: white;
+  border: 1px solid var(--line);
+  background: var(--surface);
   border-radius: 8px;
   padding: 9px 13px;
   font-size: 13px;
   font-weight: 600;
 }
 .button-secondary:hover:not(:disabled) {
-  background: #f4f7fb;
+  background: var(--surface-soft);
 }
 .button-secondary:disabled {
   opacity: 0.4;
-}
-.board-grid {
-  background-image: radial-gradient(#c6d2e7 1px, transparent 1px);
-  background-size: 17px 17px;
 }
 .soft-enter {
   animation: appear 0.25s ease-out;

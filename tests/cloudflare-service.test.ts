@@ -18,6 +18,31 @@ class MemoryStore {
 const source = await readFile(path.join(firmwareSketchPath(), "Config.h"), "utf8");
 const revision = "a".repeat(40);
 
+test("release dropdown retains cached published choices during GitHub throttling", async () => {
+  for (const status of [403, 429]) {
+    const store = new MemoryStore();
+    const value = [{ id: "release:V15.0", tag: "V15.0", label: "V15.0", prerelease: false }];
+    await store.put("metadata/releases.json", JSON.stringify({ at: 0, value }));
+    let requests = 0;
+    const sources = new FirmwareSources(store, undefined, async () => {
+      requests++;
+      return new Response("Rate limited", { status });
+    });
+    assert.deepEqual(await sources.releases(), value);
+    assert.deepEqual(await sources.releases(), value);
+    assert.equal(requests, 1, "Cached fallback must back off before retrying GitHub");
+    const cached = JSON.parse(store.data.get("metadata/releases.json")!);
+    assert.equal(cached.at, 0, "Throttling must not mark stale releases as fresh");
+    await store.put("metadata/releases.json", JSON.stringify({ ...cached, retryAt: 0 }));
+    const recovered = new FirmwareSources(store, undefined, async () => Response.json([
+      { tag_name: "V15.5", name: "V15.5", draft: false, prerelease: false },
+    ]));
+    assert.equal((await recovered.releases())[0].tag, "V15.5");
+    await assert.rejects(new FirmwareSources(new MemoryStore(), undefined,
+      async () => new Response("Rate limited", { status })).releases(), /GitHub/);
+  }
+});
+
 function gitAdvertisement(records: string[]) {
   const packet = (value: string) => (Buffer.byteLength(value) + 4).toString(16).padStart(4, "0") + value;
   return packet("# service=git-upload-pack\n") + "0000" + records.map(packet).join("") + "0000";

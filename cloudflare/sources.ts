@@ -5,9 +5,9 @@ import type { FirmwareProject, FirmwareRelease } from "../src/lib/firmware";
 import type { BuildStore } from "./build-cache";
 import { gitRevision } from "./git-refs";
 
-type Timed<T> = { at: number; value: T };
+type Timed<T> = { at: number; value: T; retryAt?: number };
 class GitHubError extends FirmwareError {
-  constructor(readonly upstreamStatus: number) {
+  constructor(readonly upstreamStatus: number, readonly retryAt = Date.now() + 60_000) {
     super(`GitHub could not load this firmware (${upstreamStatus}). Please try again shortly.`, 502);
   }
 }
@@ -20,7 +20,14 @@ export class FirmwareSources {
     // Send credentials only to the GitHub API, never the raw source host.
     if (url.startsWith("https://api.github.com/") && this.githubToken) headers.set("Authorization", `Bearer ${this.githubToken}`);
     const response = await this.fetcher(url, { ...init, headers, signal: AbortSignal.timeout(20_000) });
-    if (!response.ok) throw new GitHubError(response.status);
+    if (!response.ok) {
+      const retryAfter = response.headers.get("Retry-After");
+      const seconds = Number(retryAfter);
+      const retryAt = retryAfter && !Number.isFinite(seconds) ? Date.parse(retryAfter) : Date.now() + seconds * 1000;
+      const resetAt = Number(response.headers.get("X-RateLimit-Reset")) * 1000;
+      throw new GitHubError(response.status, Math.max(Date.now() + 60_000,
+        ...[retryAt, resetAt].filter(Number.isFinite)));
+    }
     return response;
   }
   private async revision(id: string): Promise<string> {
@@ -49,8 +56,17 @@ export class FirmwareSources {
   async releases(): Promise<FirmwareRelease[]> {
     const object = await this.store.get("metadata/releases.json");
     const cached = object ? await object.json<Timed<FirmwareRelease[]>>() : null;
-    if (cached && Date.now() - cached.at < 300_000) return cached.value;
-    const value = await fetchReleases((input, init) => this.upstream(String(input), init));
+    if (cached && (Date.now() - cached.at < 300_000 || (cached.retryAt ?? 0) > Date.now())) return cached.value;
+    let value: FirmwareRelease[];
+    try {
+      value = await fetchReleases((input, init) => this.upstream(String(input), init));
+    } catch (error) {
+      if (!cached || !(error instanceof GitHubError) || ![403, 429].includes(error.upstreamStatus)) throw error;
+      // Retain the last published choices while honoring GitHub's retry time.
+      // Keep their original age so recovery triggers a real metadata refresh.
+      await this.store.put("metadata/releases.json", JSON.stringify({ ...cached, retryAt: error.retryAt }));
+      return cached.value;
+    }
     await this.store.put("metadata/releases.json", JSON.stringify({ at: Date.now(), value }));
     return value;
   }

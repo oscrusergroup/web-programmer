@@ -1,5 +1,6 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
+import Image from "next/image";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -36,7 +37,8 @@ import {
   type SerialPort,
 } from "@/lib/serial/web-serial";
 import { HardwareFields, CoreFields, OptionFields } from "./config-fields";
-import { BoardArt } from "./board-art";
+import { ThemeSelect } from "./theme-select";
+import { isSupportedRelease } from "@/lib/release-options";
 import type { BuildResult, FirmwareProject, FirmwareRelease } from "@/lib/firmware";
 
 type Build = BuildResult;
@@ -45,6 +47,34 @@ const steps = [
   { title: "Game systems", icon: Gamepad2 },
   { title: "Options", icon: Settings2 },
 ];
+const hardwarePreviews: Partial<Record<string, {
+  src: string; alt: string;
+}>> = {
+  HW1: {
+    src: "/images/hardware-1.webp",
+    alt: "Open Source Cartridge Reader Hardware 1",
+  },
+  HW2: {
+    src: "/images/hardware-2.webp",
+    alt: "Open Source Cartridge Reader Hardware 2",
+  },
+  HW3: {
+    src: "/images/hardware-3.webp",
+    alt: "Open Source Cartridge Reader Hardware 3",
+  },
+  HW4: {
+    src: "/images/hardware-4.webp",
+    alt: "Open Source Cartridge Reader Hardware 4",
+  },
+  HW5: {
+    src: "/images/hardware-5.webp",
+    alt: "Open Source Cartridge Reader Hardware 5",
+  },
+  SERIAL_MONITOR: {
+    src: "/images/serial-monitor.webp",
+    alt: "Desktop PC displaying a serial terminal",
+  },
+};
 function download(name: string, content: string) {
   const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
   const a = document.createElement("a");
@@ -82,6 +112,7 @@ export function Programmer(initialProject: FirmwareProject) {
   const guide = useRef<HTMLDialogElement>(null);
   const activeOperation = useRef(false);
   const hardware = HARDWARE.find((k) => values[k]);
+  const hardwarePreview = hardwarePreviews[hardware ?? "HW5"];
   const coreCount = schema.filter(
     (o) => o.section === CORE_SECTION && values[o.key],
   ).length;
@@ -94,7 +125,7 @@ export function Programmer(initialProject: FirmwareProject) {
       const response = await fetch("/api/releases");
       const data = await response.json() as { releases: FirmwareRelease[]; error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load releases.");
-      setReleases(data.releases);
+      setReleases(data.releases.filter(isSupportedRelease));
     } catch (error) {
       setReleaseError(error instanceof Error ? error.message : "Could not load releases.");
     } finally { setLoadingReleases(false); }
@@ -280,22 +311,22 @@ export function Programmer(initialProject: FirmwareProject) {
   const fields = { schema, values, onChange: update, disabled: !!busy || !firmwareReady };
   return (
     <div className="min-h-screen">
-      <header className="border-b border-slate-200 bg-white">
-        <div className="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between gap-4 px-5 sm:px-8">
+      <header className="border-b border-line bg-surface">
+        <div className="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between gap-2 px-4 sm:gap-4 sm:px-8">
           <a
             href="/"
-            className="flex items-center gap-3"
+            className="flex items-center gap-2 sm:gap-3"
             aria-label="Cartridge Lab home"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-accent text-white">
+            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white">
               <CircuitBoard size={25} strokeWidth={1.6} />
             </span>
             <span className="text-lg font-bold tracking-[-.6px]">
               cartridge<span className="font-normal text-muted">lab</span>
             </span>
           </a>
-          <nav className="flex items-center gap-7 text-sm">
-            <span className="hidden font-semibold text-accent sm:block">
+          <nav className="flex items-center gap-2 text-sm sm:gap-5">
+            <span className="hidden font-semibold text-accent lg:block">
               Firmware programmer
             </span>
             <button
@@ -316,6 +347,7 @@ export function Programmer(initialProject: FirmwareProject) {
               <span className="hidden md:inline">The project</span>
               <ArrowUpRight size={17} />
             </a>
+            <ThemeSelect />
           </nav>
         </div>
       </header>
@@ -323,11 +355,8 @@ export function Programmer(initialProject: FirmwareProject) {
         <div className="mb-9 flex flex-wrap items-end justify-between gap-5">
           <div>
             <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted">
-              <span className="h-1.5 w-1.5 rounded-full bg-accent" />
+              <span className="h-1.5 w-1.5 rounded-full bg-brand" />
               Open Source Cartridge Reader
-              <span className="ml-1 rounded bg-[#e7edf7] px-2 py-0.5 font-mono text-[10px]">
-                {firmwareReady ? version : "Loading source"}
-              </span>
             </div>
             <h1 className="text-[29px] leading-tight font-semibold tracking-[-1.2px] sm:text-[38px]">
               A fresh start for your reader.
@@ -338,9 +367,9 @@ export function Programmer(initialProject: FirmwareProject) {
               browser.
             </p>
           </div>
-          <div className="mb-1 flex items-center gap-2 rounded-full border border-slate-200 bg-white px-3 py-2 text-[11px] text-muted">
+          <div className="mb-1 flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 text-[11px] text-muted">
             <span
-              className={`h-1.5 w-1.5 rounded-full ${compiler === true ? "bg-emerald-500" : compiler === false ? "bg-amber-500" : "bg-slate-300"}`}
+              className={`h-1.5 w-1.5 rounded-full ${compiler === true ? "bg-emerald-500" : compiler === false ? "bg-amber-500" : "bg-line-strong"}`}
             />
             {compiler === null
               ? "Checking compiler…"
@@ -354,15 +383,15 @@ export function Programmer(initialProject: FirmwareProject) {
             <div className="max-w-lg">
               <h2 id="firmware-source-heading" className="text-sm font-semibold">Firmware source</h2>
               <p className="mt-1 text-xs leading-5 text-muted">
-                Use the latest repository code or choose a published release.
+                Use the latest repository code or choose a release from V15.0 onward.
                 Changing versions resets your configuration and previous build.
               </p>
             </div>
             <div className="w-full sm:max-w-xs">
-              <label htmlFor="firmware-source" className="sr-only">Firmware version</label>
+              <label htmlFor="firmware-source" className="mb-2 block text-xs font-semibold">Code version</label>
               <select id="firmware-source" value={firmwareId} disabled={!!busy}
                 onChange={event => void selectFirmware(event.target.value)}
-                className="w-full rounded-lg border border-slate-200 bg-white px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50">
+                className="w-full rounded-lg border border-line bg-surface px-3 py-2.5 text-sm outline-none focus:border-accent focus:ring-2 focus:ring-accent/20 disabled:opacity-50">
                 <option value="latest">Latest repository code</option>
                 {releases.length > 0 && <optgroup label="Published releases">
                   {releases.map(release => <option key={release.id} value={release.id}>
@@ -372,13 +401,13 @@ export function Programmer(initialProject: FirmwareProject) {
               </select>
               {loadingReleases && <p role="status" className="mt-2 text-xs text-muted">Loading releases…</p>}
               {!loadingReleases && !releaseError && !releases.length && <p className="mt-2 text-xs text-muted">No published releases available.</p>}
-              {releaseError && <p role="alert" className="mt-2 text-xs leading-5 text-amber-800">{releaseError}{" "}
+              {releaseError && <p role="alert" className="mt-2 text-xs leading-5 text-amber-800 dark:text-amber-200">{releaseError}{" "}
                 <button onClick={() => void loadReleases()} className="font-medium underline">Retry release list</button>
               </p>}
               {firmwareReady && <p className="mt-2 font-mono text-[10px] text-muted">{version} · {revision.slice(0, 12)}</p>}
             </div>
           </div>
-          {sourceError && <div role="alert" className="mt-4 rounded-lg bg-red-50 p-3 text-xs leading-5 text-red-800">{sourceError}{" "}
+          {sourceError && <div role="alert" className="mt-4 rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs leading-5 text-red-800 dark:text-red-200">{sourceError}{" "}
             <button disabled={!!busy} onClick={() => void selectFirmware(firmwareId)} className="font-medium underline">Retry version</button>
           </div>}
           {busy === "source" && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin" />Loading firmware options…</p>}
@@ -389,7 +418,7 @@ export function Programmer(initialProject: FirmwareProject) {
             aria-label="Firmware configuration"
           >
             <div
-              className="flex border-b border-slate-200 bg-[#fcfdff]"
+              className="flex border-b border-line bg-surface-soft"
               role="tablist"
               aria-label="Configuration steps"
             >
@@ -401,17 +430,17 @@ export function Programmer(initialProject: FirmwareProject) {
                   aria-selected={step === i}
                   aria-controls={`panel-${i}`}
                   onClick={() => setStep(i)}
-                  className={`relative flex flex-1 items-center justify-center gap-2 border-b-2 px-2 py-5 text-xs font-semibold sm:text-sm ${step === i ? "border-accent text-accent" : "border-transparent text-muted hover:bg-slate-50"}`}
+                  className={`relative flex flex-1 items-center justify-center gap-2 border-b-2 px-2 py-5 text-xs font-semibold sm:text-sm ${step === i ? "border-accent text-accent" : "border-transparent text-muted hover:bg-surface-soft"}`}
                 >
                   <span
-                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === i ? "bg-accent text-white" : "bg-slate-100 text-slate-500"}`}
+                    className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === i ? "bg-brand text-white" : "bg-surface-raised text-muted"}`}
                   >
                     {i + 1}
                   </span>
                   <Icon size={16} className="hidden sm:block" />
                   {title}
                   {i === 1 && (
-                    <span className="hidden rounded bg-slate-100 px-1.5 py-0.5 text-[10px] sm:block">
+                    <span className="hidden rounded bg-surface-raised px-1.5 py-0.5 text-[10px] sm:block">
                       {coreCount}
                     </span>
                   )}
@@ -432,7 +461,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 <OptionFields {...fields} />
               )}
             </div>
-            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-slate-100 px-5 py-4 sm:px-7">
+            <div className="flex flex-wrap items-center justify-between gap-3 border-t border-line-soft px-5 py-4 sm:px-7">
               <button
                 onClick={restore}
                 disabled={!!busy || !firmwareReady}
@@ -465,15 +494,24 @@ export function Programmer(initialProject: FirmwareProject) {
           </section>
           <aside className="space-y-4 lg:sticky lg:top-6">
             <section className="panel overflow-hidden">
-              <div className="board-grid flex h-[177px] items-center justify-center border-b border-slate-200 bg-[#eef3fb] px-3">
-                <BoardArt />
-              </div>
+              {hardwarePreview && (
+                <div className="relative aspect-[4/3] border-b border-line">
+                  <Image
+                    {...hardwarePreview}
+                    fill
+                    sizes="(min-width: 1024px) 340px, (min-width: 640px) calc(100vw - 64px), calc(100vw - 40px)"
+                    loading="eager"
+                    unoptimized
+                    className="object-contain p-4"
+                  />
+                </div>
+              )}
               <div className="p-5">
                 <div className="flex items-center justify-between">
                   <h2 className="text-base font-bold tracking-tight">
                     Your firmware
                   </h2>
-                  <span className="rounded-md bg-slate-100 px-2 py-1 text-[10px] font-medium text-muted">
+                  <span className="rounded-md bg-surface-raised px-2 py-1 text-[10px] font-medium text-muted">
                     {firmwareReady ? version : "Loading source"}
                   </span>
                 </div>
@@ -484,7 +522,7 @@ export function Programmer(initialProject: FirmwareProject) {
                   <div className="flex justify-between">
                     <dt className="text-muted">Hardware revision</dt>
                     <dd
-                      className={hardware ? "font-semibold" : "text-amber-700"}
+                      className={hardware ? "font-semibold" : "text-amber-700 dark:text-amber-300"}
                     >
                       {hardware === "SERIAL_MONITOR"
                         ? "Serial monitor"
@@ -503,16 +541,16 @@ export function Programmer(initialProject: FirmwareProject) {
                   </div>
                 </dl>
                 {build && (
-                  <div className="mt-5 rounded-lg bg-[#f0f7f4] p-3">
+                  <div className="mt-5 rounded-lg bg-emerald-50 dark:bg-emerald-950/40 p-3">
                     <div className="mb-2 flex justify-between text-[11px]">
-                      <span className="font-medium text-emerald-800">
+                      <span className="font-medium text-emerald-800 dark:text-emerald-200">
                         Flash memory
                       </span>
                       <span className="text-muted">
                         {(build.flashBytes / 1024).toFixed(1)} / 248 KB
                       </span>
                     </div>
-                    <div className="h-1.5 overflow-hidden rounded-full bg-emerald-100">
+                    <div className="h-1.5 overflow-hidden rounded-full bg-emerald-100 dark:bg-emerald-900">
                       <div
                         className="h-full bg-emerald-600"
                         style={{
@@ -525,12 +563,12 @@ export function Programmer(initialProject: FirmwareProject) {
                     </p>
                   </div>
                 )}
-                <div className="mt-5 border-t border-slate-100 pt-4">
+                <div className="mt-5 border-t border-line-soft pt-4">
                   {errors.filter((e) => !e.includes("exactly one hardware"))
                     .length > 0 && (
                     <div
                       role="status"
-                      className="mb-3 rounded-lg border border-amber-200 bg-amber-50 p-3 text-xs leading-5 text-amber-900"
+                      className="mb-3 rounded-lg border border-amber-200 dark:border-amber-800 bg-amber-50 dark:bg-amber-950/40 p-3 text-xs leading-5 text-amber-900 dark:text-amber-200"
                     >
                       <p className="font-semibold">Review your settings</p>
                       {errors
@@ -556,13 +594,11 @@ export function Programmer(initialProject: FirmwareProject) {
                         ? "Rebuild firmware"
                         : "Build firmware"}
                   </button>
-                  {!hardware && (
-                    <p className="mt-2 text-center text-[11px] text-muted">
-                      Choose your hardware to get started.
-                    </p>
-                  )}
+                  <p className="mt-2 min-h-4 text-center text-[11px] text-muted">
+                    {!hardware && "Choose your hardware to get started."}
+                  </p>
                   {compiler === false && (
-                    <div className="mt-3 text-xs leading-5 text-amber-800">
+                    <div className="mt-3 text-xs leading-5 text-amber-800 dark:text-amber-200">
                       The host must run <code>pnpm run setup:arduino</code>.
                       <button
                         onClick={checkCompiler}
@@ -575,7 +611,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 </div>
                 <div className="mt-5 flex items-center gap-3">
                   <span
-                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${port ? "bg-emerald-50 text-emerald-700" : "bg-slate-100 text-slate-400"}`}
+                    className={`flex h-9 w-9 items-center justify-center rounded-lg ${port ? "bg-emerald-50 dark:bg-emerald-950/40 text-emerald-700 dark:text-emerald-300" : "bg-surface-raised text-muted"}`}
                   >
                     <Usb size={19} />
                   </span>
@@ -592,7 +628,7 @@ export function Programmer(initialProject: FirmwareProject) {
                   <button
                     disabled={!!busy || !supported}
                     onClick={connect}
-                    className="text-xs font-semibold text-accent disabled:text-slate-400"
+                    className="text-xs font-semibold text-accent disabled:text-muted"
                   >
                     {port ? "Change" : "Connect"}
                   </button>
@@ -635,7 +671,7 @@ export function Programmer(initialProject: FirmwareProject) {
               </div>
             </section>
             <div className="flex gap-3 px-2 text-xs leading-5 text-muted">
-              <Info size={16} className="mt-0.5 shrink-0 text-[#8598b8]" />
+              <Info size={16} className="mt-0.5 shrink-0 text-muted" />
               <p>
                 Pick only the systems you need. Enabling too many cores can
                 exceed your reader’s memory.
@@ -645,7 +681,7 @@ export function Programmer(initialProject: FirmwareProject) {
         </div>
         <div aria-live="polite" className="mt-5 space-y-3">
           {warnings.length > 0 && hardware && (
-            <div className="rounded-xl border border-blue-100 bg-blue-50 p-4 text-xs leading-6 text-blue-900">
+            <div className="rounded-xl border border-blue-100 dark:border-blue-800 bg-blue-50 dark:bg-blue-950/40 p-4 text-xs leading-6 text-blue-900 dark:text-blue-200">
               {warnings.map((w) => (
                 <p key={w}>{w}</p>
               ))}
@@ -654,7 +690,7 @@ export function Programmer(initialProject: FirmwareProject) {
           {error && (
             <div
               role="alert"
-              className="rounded-xl border border-red-200 bg-red-50 p-4 text-sm leading-6 whitespace-pre-line text-red-800"
+              className="rounded-xl border border-red-200 dark:border-red-800 bg-red-50 dark:bg-red-950/40 p-4 text-sm leading-6 whitespace-pre-line text-red-800 dark:text-red-200"
             >
               {error}
             </div>
@@ -675,10 +711,10 @@ export function Programmer(initialProject: FirmwareProject) {
                   aria-valuenow={progress}
                   aria-valuemin={0}
                   aria-valuemax={100}
-                  className="mt-3 h-2 overflow-hidden rounded bg-slate-100"
+                  className="mt-3 h-2 overflow-hidden rounded bg-surface-raised"
                 >
                   <div
-                    className="h-full bg-accent transition-all"
+                    className="h-full bg-brand transition-all"
                     style={{ width: `${progress}%` }}
                   />
                 </div>
@@ -692,7 +728,7 @@ export function Programmer(initialProject: FirmwareProject) {
             </div>
           )}
           {uploaded && (
-            <div className="flex items-center gap-3 rounded-xl border border-emerald-200 bg-emerald-50 p-5 text-emerald-900">
+            <div className="flex items-center gap-3 rounded-xl border border-emerald-200 dark:border-emerald-800 bg-emerald-50 dark:bg-emerald-950/40 p-5 text-emerald-900 dark:text-emerald-200">
               <CheckCircle2 size={22} />
               <div>
                 <p className="text-sm font-semibold">Your reader is ready.</p>
@@ -724,13 +760,13 @@ export function Programmer(initialProject: FirmwareProject) {
               />
             </button>
             {showLog && (
-              <pre className="max-h-80 overflow-auto border-t border-slate-200 bg-[#18283f] p-5 font-mono text-[11px] leading-5 whitespace-pre-wrap text-slate-200">
+              <pre className="max-h-80 overflow-auto border-t border-line bg-[#18283f] dark:bg-black p-5 font-mono text-[11px] leading-5 whitespace-pre-wrap text-slate-200">
                 {log}
               </pre>
             )}
           </section>
         )}
-        <footer className="mt-10 flex flex-wrap justify-between gap-3 border-t border-slate-200 pt-5 text-[11px] text-muted">
+        <footer className="mt-10 flex flex-wrap justify-between gap-3 border-t border-line pt-5 text-[11px] text-muted">
           <p>Made for the joy of keeping games alive.</p>
           <p className="flex items-center gap-1.5">
             <Cpu size={12} />
@@ -741,7 +777,19 @@ export function Programmer(initialProject: FirmwareProject) {
       </main>
       <dialog
         ref={guide}
-        className="fixed inset-0 m-auto w-[min(92vw,550px)] rounded-2xl border border-slate-200 bg-white p-7 text-ink shadow-xl backdrop:bg-slate-900/40"
+        onClick={(event) => {
+          if (event.target !== event.currentTarget) return;
+          const bounds = event.currentTarget.getBoundingClientRect();
+          if (
+            event.clientX < bounds.left ||
+            event.clientX > bounds.right ||
+            event.clientY < bounds.top ||
+            event.clientY > bounds.bottom
+          ) {
+            event.currentTarget.close();
+          }
+        }}
+        className="fixed inset-0 m-auto w-[min(92vw,550px)] rounded-2xl border border-line bg-surface p-7 text-ink shadow-xl backdrop:bg-black/50"
       >
         <div className="flex items-center justify-between">
           <h2 className="text-xl font-semibold">From USB to ready to play</h2>
@@ -774,7 +822,7 @@ export function Programmer(initialProject: FirmwareProject) {
             the USB cable connected until writing and verification finish.
           </li>
         </ol>
-        <div className="mt-5 rounded-lg bg-slate-50 p-4 text-xs leading-5 text-muted">
+        <div className="mt-5 rounded-lg bg-surface-soft p-4 text-xs leading-5 text-muted">
           Use desktop Chrome or Edge. A hosted installation needs HTTPS and a
           Node server with Arduino CLI. Your USB port is accessed only by your
           browser; configuration and compilation run on the server.

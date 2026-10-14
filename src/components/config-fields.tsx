@@ -56,7 +56,7 @@ export function Toggle({
           disabled={disabled}
           aria-label={option.label}
         />
-        <span className="h-[22px] w-10 rounded-full bg-slate-200 peer-checked:bg-accent peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent peer-disabled:opacity-50" />
+        <span className="h-[22px] w-10 rounded-full bg-line peer-checked:bg-brand peer-focus-visible:outline-2 peer-focus-visible:outline-offset-4 peer-focus-visible:outline-accent peer-disabled:opacity-50" />
         <span className="absolute top-[3px] left-[3px] h-4 w-4 rounded-full bg-white shadow-sm transition-transform peer-checked:translate-x-[18px]" />
       </span>
     </label>
@@ -79,7 +79,7 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
           {HARDWARE.map((key) => (
             <label
               key={key}
-              className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${values[key] ? "border-accent bg-[#f1f5ff] ring-1 ring-accent" : "border-slate-200 hover:border-slate-400"}`}
+              className={`relative flex cursor-pointer items-start gap-3 rounded-xl border p-4 transition-colors ${values[key] ? "border-accent bg-selected ring-1 ring-accent" : "border-line hover:border-line-strong"}`}
             >
               <input
                 type="radio"
@@ -89,7 +89,7 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
                 onChange={() => onChange(key, true)}
                 className="sr-only peer"
               />
-              <span className="rounded-lg bg-white p-2 text-slate-500 peer-focus-visible:outline-2 peer-focus-visible:outline-accent">
+              <span className="rounded-lg bg-surface p-2 text-muted peer-focus-visible:outline-2 peer-focus-visible:outline-accent">
                 <CircuitBoard size={23} strokeWidth={1.5} />
               </span>
               <span className="flex-1">
@@ -103,7 +103,7 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
                 </span>
               </span>
               <span
-                className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${values[key] ? "border-accent bg-accent" : "border-slate-300"}`}
+                className={`mt-1 flex h-4 w-4 shrink-0 items-center justify-center rounded-full border ${values[key] ? "border-accent bg-brand" : "border-line-strong"}`}
               >
                 {values[key] && (
                   <Check size={10} color="white" strokeWidth={3} />
@@ -113,7 +113,7 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
           ))}
         </div>
       </fieldset>
-      <div className="mt-8 border-t border-slate-100 pt-6">
+      <div className="mt-8 border-t border-line-soft pt-6">
         <div className="mb-1 flex items-center gap-2">
           <Cpu size={17} className="text-muted" />
           <h3 className="text-sm font-semibold">Installed modules</h3>
@@ -121,7 +121,7 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
         <p className="text-xs text-muted">
           Enable only the modules fitted to your reader.
         </p>
-        <div className="mt-3 divide-y divide-slate-100">
+        <div className="mt-3 divide-y divide-line-soft">
           {schema
             .filter((o) => o.section === "HARDWARE MODULES")
             .map((o) => (
@@ -164,7 +164,7 @@ export function CoreFields({ schema, values, onChange, disabled }: Props) {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Search game systems…"
             aria-label="Search game systems"
-            className="w-full rounded-lg border border-slate-200 py-2.5 pr-3 pl-9 text-sm"
+            className="w-full rounded-lg border border-line bg-surface py-2.5 pr-3 pl-9 text-sm"
           />
         </div>
         <button
@@ -181,7 +181,7 @@ export function CoreFields({ schema, values, onChange, disabled }: Props) {
         {filtered.map((o) => (
           <label
             key={o.key}
-            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 ${values[o.key] ? "border-[#ced9ff] bg-[#f5f7ff]" : "border-slate-200"}`}
+            className={`flex cursor-pointer items-center gap-3 rounded-lg border px-3 py-3 ${values[o.key] ? "border-selected-border bg-selected" : "border-line"}`}
           >
             <input
               type="checkbox"
@@ -216,7 +216,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
       <p className="mt-2 text-sm text-muted">
         Fine-tune the features included in your firmware.
       </p>
-      <div className="mt-6 rounded-xl bg-slate-50 p-4">
+      <div className="mt-6 rounded-xl bg-surface-soft p-4">
         <h3 className="text-sm font-semibold">LCD backlight</h3>
         <p className="mt-1 text-xs text-muted">
           Color channels from 0 to 255. Used by LCD hardware.
@@ -236,7 +236,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
                   next[i] = e.target.value;
                   onChange("OPTION_LCD_BG_COLOR", next.join(", "));
                 }}
-                className="mt-1 block w-full rounded-lg border border-slate-200 bg-white p-2 text-sm text-ink"
+                className="mt-1 block w-full rounded-lg border border-line bg-surface p-2 text-sm text-ink"
               />
             </label>
           ))}
@@ -249,7 +249,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
             value={values.DS1307 ? "DS1307" : "DS3231"}
             disabled={disabled || !values.ENABLE_RTC}
             onChange={(e) => onChange(e.target.value, true)}
-            className="mt-2 block w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm disabled:opacity-50"
+            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm disabled:opacity-50"
           >
             <option>DS3231</option>
             <option>DS1307</option>
@@ -273,7 +273,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
                 e.target.value === "off" ? false : e.target.value,
               )
             }
-            className="mt-2 block w-full rounded-lg border border-slate-200 bg-white p-2.5 text-sm"
+            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm"
           >
             <option value="off">Firmware default</option>
             <option value="0">Raw bytes</option>
@@ -282,7 +282,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
           </select>
         </label>
       </div>
-      <div className="mt-5 divide-y divide-slate-100">
+      <div className="mt-5 divide-y divide-line-soft">
         {schema
           .filter(
             (o) =>
