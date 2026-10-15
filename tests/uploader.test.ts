@@ -4,6 +4,7 @@ import { parseHex, MAX_FLASH } from "../src/lib/serial/hex";
 import {
   encodeFrame,
   flashMega,
+  SerialTimeoutError,
   type ByteTransport,
 } from "../src/lib/serial/stk500v2";
 
@@ -75,6 +76,69 @@ class Bootloader implements ByteTransport {
     return Uint8Array.from(this.pending.splice(0, length));
   }
 }
+test("synchronizes when the bootloader misses the first two sign-on requests", async () => {
+  class StartingBootloader extends Bootloader {
+    signOns = 0;
+    override async write(frame: Uint8Array) {
+      if (frame[5] === 1) {
+        assert.equal(frame[1], 1, "older Mega bootloaders need sign-on sequence 1");
+        if (++this.signOns <= 2) return;
+      }
+      await super.write(frame);
+    }
+    override async readExact(length: number) {
+      if (this.pending.length < length) throw new SerialTimeoutError();
+      return super.readExact(length);
+    }
+  }
+  const target = new StartingBootloader();
+  await flashMega(target, new Uint8Array(256).fill(42));
+  assert.equal(target.signOns, 3);
+  assert.deepEqual([...target.memory.slice(0, 4)], [42, 42, 42, 42]);
+  assert.equal(target.commands.at(-1), 0x11);
+});
+
+test("ignores a delayed duplicate sign-on response before checking the MCU", async () => {
+  class DuplicateBootloader extends Bootloader {
+    override async write(frame: Uint8Array) {
+      await super.write(frame);
+      if (frame[5] === 1) this.pending.push(...this.pending);
+    }
+  }
+  const target = new DuplicateBootloader();
+  await flashMega(target, new Uint8Array(256).fill(42));
+  assert.equal(target.writes, 1);
+});
+
+test("stops synchronization after bounded retries without writing flash", async () => {
+  let requests = 0;
+  const target: ByteTransport = {
+    async write(frame) {
+      assert.equal(frame[5], 1, "only sign-on is safe before synchronization");
+      requests++;
+    },
+    async readExact() { throw new SerialTimeoutError(); },
+  };
+  await assert.rejects(flashMega(target, new Uint8Array(256)), /bootloader.*respond/i);
+  assert.ok(requests > 1 && requests <= 10);
+});
+
+test("never retries a timed-out firmware write", async () => {
+  class InterruptedBootloader extends Bootloader {
+    override async write(frame: Uint8Array) {
+      await super.write(frame);
+      if (frame[5] === 0x13) this.pending = [];
+    }
+    override async readExact(length: number) {
+      if (this.pending.length < length) throw new SerialTimeoutError();
+      return super.readExact(length);
+    }
+  }
+  const target = new InterruptedBootloader();
+  await assert.rejects(flashMega(target, new Uint8Array(256)), /0x13.*timed out/i);
+  assert.equal(target.writes, 1);
+  assert.equal(target.commands.filter(command => command === 1).length, 1);
+});
 test("HEX parser supports extended addresses and fills gaps", () => {
   const image = parseHex(hex);
   assert.equal(image.length, 131328);

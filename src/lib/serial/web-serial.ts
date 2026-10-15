@@ -1,5 +1,10 @@
 import { parseHex } from "./hex";
-import { flashMega, type ByteTransport, type FlashProgress } from "./stk500v2";
+import {
+  flashMega,
+  SerialTimeoutError,
+  type ByteTransport,
+  type FlashProgress,
+} from "./stk500v2";
 export interface SerialPort {
   readable: ReadableStream<Uint8Array> | null;
   writable: WritableStream<Uint8Array> | null;
@@ -57,10 +62,7 @@ export class SerialTransport implements ByteTransport {
     while (this.buffer.length < length) {
       if (this.error) throw this.error;
       const remaining = deadline - Date.now();
-      if (remaining <= 0)
-        throw new Error(
-          "The bootloader timed out. Close Arduino IDE's serial monitor, reconnect USB, and try again.",
-        );
+      if (remaining <= 0) throw new SerialTimeoutError();
       await new Promise<void>((resolve) => {
         const timer = setTimeout(() => {
           this.wake = undefined;
@@ -106,9 +108,12 @@ export async function uploadFirmware(
     );
     progress("Resetting Arduino", 0);
     await port.setSignals({ dataTerminalReady: false, requestToSend: false });
-    await pause(100);
+    await pause(50);
     await port.setSignals({ dataTerminalReady: true, requestToSend: true });
-    await pause(150);
+    // Release the active-low reset lines before talking to the bootloader,
+    // matching AVRDUDE's wiring reset pulse. USB controls the pulse duration.
+    await port.setSignals({ dataTerminalReady: false, requestToSend: false });
+    await pause(100);
     transport.clear();
     await flashMega(transport, image, progress);
   } finally {

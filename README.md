@@ -38,8 +38,11 @@ Each loaded version gets an immutable sketch snapshot under `.firmware-cache/bui
 4. Connect the Mega 2560 with a USB data cable and close other applications using the serial port.
 5. Click **Connect**, choose the USB serial device, then **Upload to Arduino**.
 6. Keep the cable connected through writing and readback verification. The board restarts when finished.
+7. Download **SD card files (.zip)** below the upload button. Extract the archive and copy the contents of its `sd` folder to the root of your SD card.
 
-`Config.h` and compiled application `.hex` files can also be downloaded. Editing any setting invalidates the previous build. Browser permission is requested from the Connect button. USB serial adapters on clone boards are supported without restricting vendor IDs; the uploader checks the ATmega2560 device signature before writing.
+`Config.h` can also be downloaded. Editing any setting invalidates the previous build. Browser permission is requested from the Connect button. USB serial adapters on clone boards are supported without restricting vendor IDs; the uploader checks the ATmega2560 device signature before writing.
+
+The SD download uses the supplied archive at `public/downloads/sd.zip`, independently of the selected firmware release. Keep this file in version control. The website serves it unchanged as a static download; builds do not fetch or regenerate SD files. Replace this file explicitly when a different SD archive is needed.
 
 ## How configuration works
 
@@ -50,6 +53,8 @@ Validation requires one hardware revision, validates LCD channels in the firmwar
 Builds copy the sketch to a temporary directory and invoke Arduino CLI with an argument array and a fixed `arduino:avr:mega:cpu=atmega2560` target. The API accepts a prepared source revision and a complete allowlisted configuration, caps request bodies at 16 KiB, serializes compiler jobs per Node process and shares equivalent pending builds, limits execution to four minutes, and cleans temporary files. Compiler output and actual flash/RAM usage are returned to the UI. No source code, shell arguments, paths or board targets are accepted from visitors.
 
 `src/lib/serial/` implements Intel HEX validation and the stock Mega 2560 STK500v2 bootloader flow at 115200 baud: reset, signature check, page programming, complete readback and restart. It validates checksums, response sequences and the 248 KiB application boundary. Bootloader and EEPROM are not modified. Protocol commands follow [Arduino's bootloader source](https://github.com/arduino/ArduinoCore-avr/tree/master/bootloaders/stk500v2); Web Serial behavior follows [Chrome's documentation](https://developer.chrome.com/docs/capabilities/serial).
+
+The reset pulse deasserts DTR/RTS before contacting the bootloader, following [AVRDUDE's wiring reset flow](https://github.com/avrdudes/avrdude/blob/main/src/wiring.c). Initial sign-on retries up to ten times with a 250 ms response deadline per attempt, using sequence 1 for compatibility with older Mega bootloaders. Valid delayed replies from earlier commands are skipped. Flash writes are never automatically retried. If sign-on still fails, confirm the selected USB port; on readers with automatic reset disabled, press RESET while the upload reports **Checking bootloader**. Later timeouts identify the command that stopped responding.
 
 ## Deploy on Cloudflare
 

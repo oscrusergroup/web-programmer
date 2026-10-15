@@ -651,21 +651,17 @@ export function Programmer(initialProject: FirmwareProject) {
                       ? "Upload again"
                       : "Upload to Arduino"}
                 </button>
-                {build && (
-                  <button
-                    onClick={() =>
-                      download(`OSCR-${firmwareReady ? version : "Loading source"}-${hardware}.hex`, build.hex)
-                    }
-                    disabled={!!busy}
-                    className="mt-3 flex w-full items-center justify-center gap-1.5 text-[11px] text-muted hover:text-accent"
-                  >
-                    <Download size={12} />
-                    Download compiled .hex
-                  </button>
-                )}
+                <a
+                  href="/downloads/sd.zip"
+                  download
+                  className="mt-3 flex w-full items-center justify-center gap-1.5 text-[11px] text-muted hover:text-accent"
+                >
+                  <Download size={12} />
+                  Download SD card files (.zip)
+                </a>
                 <p className="mt-4 text-center text-[10px] leading-5 text-muted">
                   {supported === false
-                    ? "USB upload needs desktop Chrome or Edge over HTTPS. You can still build and download firmware."
+                    ? "USB upload needs desktop Chrome or Edge over HTTPS. You can still download the SD card files."
                     : "USB upload works in desktop Chrome and Edge."}
                 </p>
               </div>

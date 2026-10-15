@@ -2,8 +2,15 @@ import { MAX_FLASH } from "./hex";
 export interface ByteTransport {
   write(data: Uint8Array): Promise<void>;
   readExact(length: number, timeoutMs?: number): Promise<Uint8Array>;
+  clear?(): void;
 }
 export type FlashProgress = (phase: string, percent: number) => void;
+export class SerialTimeoutError extends Error {
+  constructor(message = "Timed out waiting for serial data.") {
+    super(message);
+    this.name = "SerialTimeoutError";
+  }
+}
 export function encodeFrame(sequence: number, body: Uint8Array): Uint8Array {
   const frame = new Uint8Array(body.length + 6);
   frame.set([0x1b, sequence & 255, body.length >> 8, body.length & 255, 0x0e]);
@@ -20,34 +27,46 @@ export async function flashMega(
   if (!image.length || image.length > MAX_FLASH || image.length % 256)
     throw new Error("Invalid Mega 2560 flash image.");
   let sequence = 0;
-  async function command(body: number[] | Uint8Array): Promise<Uint8Array> {
+  async function command(
+    body: number[] | Uint8Array,
+    timeoutMs = 2500,
+  ): Promise<Uint8Array> {
     sequence = (sequence + 1) & 255;
     await transport.write(encodeFrame(sequence, Uint8Array.from(body)));
-    // A running sketch can leave a little serial output in the input buffer.
-    let start = 0;
-    for (let i = 0; i < 1024; i++) {
-      start = (await transport.readExact(1))[0];
-      if (start === 0x1b) break;
+    // One deadline per response, including stale packets and sketch output.
+    const deadline = Date.now() + timeoutMs;
+    async function read(length: number) {
+      const remaining = deadline - Date.now();
+      if (remaining <= 0) throw new SerialTimeoutError();
+      return transport.readExact(length, remaining);
     }
-    if (start !== 0x1b)
+    try {
+      for (let skipped = 0; skipped < 1024; skipped++) {
+        const start = (await read(1))[0];
+        if (start !== 0x1b) continue;
+        const header = await read(4);
+        const length = (header[1] << 8) | header[2];
+        if (header[3] !== 0x0e || length < 2 || length > 1024)
+          throw new Error("Invalid bootloader response header.");
+        const tail = await read(length + 1);
+        if ([start, ...header, ...tail].reduce((a, b) => a ^ b, 0) !== 0)
+          throw new Error("Bootloader response checksum mismatch.");
+        // A retried sign-on may leave a duplicate reply before the next command.
+        if (header[0] !== sequence) continue;
+        if (tail[0] !== body[0] || tail[1] !== 0)
+          throw new Error(
+            `Bootloader rejected command 0x${body[0].toString(16)} (status ${tail[1]}).`,
+          );
+        return tail.slice(0, -1);
+      }
       throw new Error("Bootloader did not send an STK500v2 frame.");
-    const header = await transport.readExact(4);
-    const length = (header[1] << 8) | header[2];
-    if (
-      header[0] !== sequence ||
-      header[3] !== 0x0e ||
-      length < 2 ||
-      length > 1024
-    )
-      throw new Error("Invalid bootloader response header.");
-    const tail = await transport.readExact(length + 1);
-    if ([start, ...header, ...tail].reduce((a, b) => a ^ b, 0) !== 0)
-      throw new Error("Bootloader response checksum mismatch.");
-    if (tail[0] !== body[0] || tail[1] !== 0)
-      throw new Error(
-        `Bootloader rejected command 0x${body[0].toString(16)} (status ${tail[1]}).`,
-      );
-    return tail.slice(0, -1);
+    } catch (error) {
+      if (error instanceof SerialTimeoutError)
+        throw new SerialTimeoutError(
+          `Bootloader command 0x${body[0].toString(16).padStart(2, "0")} timed out at 115200 baud. Reconnect USB and upload again.`,
+        );
+      throw error;
+    }
   }
   async function address(byteAddress: number) {
     const word = byteAddress / 2;
@@ -59,8 +78,22 @@ export async function flashMega(
       word & 255,
     ]);
   }
-  progress("Checking bootloader", 0);
-  await command([1]);
+  for (let attempt = 1; attempt <= 10; attempt++) {
+    progress(`Checking bootloader (attempt ${attempt} of 10)`, 0);
+    // Keep sign-on at sequence 1 for older Mega bootloaders, too.
+    sequence = 0;
+    transport.clear?.();
+    try {
+      await command([1], 250);
+      break;
+    } catch (error) {
+      if (!(error instanceof SerialTimeoutError)) throw error;
+      if (attempt === 10)
+        throw new Error(
+          "The Mega 2560 bootloader did not respond after 10 attempts at 115200 baud. Select the Mega's USB port and close other serial apps. If automatic reset is disabled, press RESET while the upload says Checking bootloader.",
+        );
+    }
+  }
   const signature = [];
   for (let i = 0; i < 3; i++)
     signature.push((await command([0x1b, 0, 0x30, 0, i, 0]))[2]);

@@ -2,6 +2,8 @@
 
 The Next.js + Tailwind site runs on Cloudflare Workers through OpenNext. A private firmware Worker validates configuration, reads GitHub source metadata, and checks R2 for completed builds. On a cache miss it calls a Durable Object that starts a Cloudflare Container with Arduino CLI and the AVR toolchain. The container sleeps after five idle minutes. Browser USB upload still uses Web Serial.
 
+The download below the upload button serves the supplied `public/downloads/sd.zip` unchanged. OpenNext deploys it as a static asset. It is independent of the chosen firmware release and is not fetched or regenerated during builds.
+
 Regular Worker isolates cannot execute the native AVR compiler; Cloudflare Containers supply the Linux environment. This deployment needs a Workers Paid account with Containers available and R2 enabled. See [Containers setup](https://developers.cloudflare.com/containers/get-started/) and [pricing](https://developers.cloudflare.com/containers/platform/pricing/).
 
 ```mermaid
