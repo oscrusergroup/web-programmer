@@ -1,6 +1,7 @@
 "use client";
 import { useEffect, useRef, useState } from "react";
 import Image from "next/image";
+import Link from "next/link";
 import {
   ArrowRight,
   ArrowUpRight,
@@ -321,7 +322,7 @@ export function Programmer(initialProject: FirmwareProject) {
             <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white">
               <CircuitBoard size={25} strokeWidth={1.6} />
             </span>
-            <span className="text-lg font-bold tracking-[-.6px]">
+            <span className="hidden text-lg font-bold tracking-[-.6px] sm:inline">
               cartridge<span className="font-normal text-muted">lab</span>
             </span>
           </a>
@@ -329,6 +330,10 @@ export function Programmer(initialProject: FirmwareProject) {
             <span className="hidden font-semibold text-accent lg:block">
               Firmware programmer
             </span>
+            <Link href="/serial-monitor" aria-label="Serial monitor" className="flex items-center gap-2 text-muted hover:text-ink">
+              <Terminal size={16} aria-hidden="true" />
+              <span className="hidden sm:inline">Serial monitor</span>
+            </Link>
             <button
               aria-label="Quick guide"
               onClick={() => guide.current?.showModal()}

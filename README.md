@@ -44,6 +44,12 @@ Each loaded version gets an immutable sketch snapshot under `.firmware-cache/bui
 
 The SD download uses the supplied archive at `public/downloads/sd.zip`, independently of the selected firmware release. Keep this file in version control. The website serves it unchanged as a static download; builds do not fetch or regenerate SD files. Replace this file explicitly when a different SD archive is needed.
 
+## Serial monitor
+
+Open **Serial monitor** from the programmer header, or visit `/serial-monitor`. In desktop Chrome or Edge, choose the baud rate and click **Connect Arduino**, then select your USB device. The console displays incoming text and lets you send commands with no ending, LF, CR, or CR + LF. Enter sends the command; a single space is also supported. Clear the console, save its text log, or disable autoscroll to read earlier output.
+
+The defaults are **9600 baud** and **no line ending**, matching the OSCR firmware. Serial monitor firmware accepts `u` / `d` for menu navigation and `0`–`6` for selection. The console retains the latest 200,000 characters. Disconnect before uploading firmware; leaving the monitor page also releases the USB port. Serial communication stays in the visitor's browser and does not require a server endpoint.
+
 ## How configuration works
 
 `src/lib/config.ts` reads option groups, labels, descriptions, defaults and editable define locations directly from the referenced firmware’s `Config.h`. Block-comment examples are excluded. The Processing section is preserved, and the original sketch is never changed by a build.
