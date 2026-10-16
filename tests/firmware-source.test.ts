@@ -10,7 +10,7 @@ test("firmware setup follows remote HEAD, refreshes cached content, and preserve
   const root = await mkdtemp(path.join(tmpdir(), "firmware-source-test-"));
   const remote = path.join(root, "remote"), destination = path.join(root, "cache", "cartreader");
   const git = (cwd: string, args: string[]) => execFileSync("git", ["-C", cwd, ...args], { encoding: "utf8", stdio: ["ignore", "pipe", "pipe"] }).trim();
-  const source = { repository: remote, ref: "HEAD", sketch: "Cart_Reader" };
+  const source = { slug: "test/cartreader", repository: remote, ref: "HEAD", sketch: "Cart_Reader" };
   try {
     await mkdir(path.join(remote, "Cart_Reader"), { recursive: true });
     git(remote, ["init", "--quiet", "-b", "firmware-default"]);

@@ -16,6 +16,7 @@ const labels: Record<string, string> = {
   ENABLE_CONTROLLERTEST: "N64 controller test",
   ENABLE_FLASH8: "8-bit flash programmer",
   ENABLE_FLASH16: "16-bit flash programmer",
+  ENABLE_ROTARY_NEW_OSCR: "New OSCR rotary display",
   DS3231: "DS3231",
   DS1307: "DS1307",
   OPTION_CLOCKGEN_CALIBRATION: "Clock calibration menu",
@@ -129,6 +130,8 @@ export function validateSelection(
     errors.push(
       "VSELECT is supported only on HW3 and HW5 by this firmware's safe configuration.",
     );
+  if (values.ENABLE_ROTARY_NEW_OSCR && !values.HW4 && !values.HW5)
+    errors.push("The new OSCR rotary display is supported only on HW4 and HW5.");
   if (values.SERIAL_MONITOR && values.ENABLE_3V3FIX)
     errors.push(
       "The 3.3V stability fix cannot be used with serial monitor hardware.",

@@ -203,6 +203,9 @@ export function Programmer(initialProject: FirmwareProject) {
     setValues((current) => {
       const next = { ...current };
       if (HARDWARE.includes(key)) HARDWARE.forEach((k) => (next[k] = false));
+      // The rotary display option only exists on HW4/HW5; its toggle is locked elsewhere.
+      if (HARDWARE.includes(key) && "ENABLE_ROTARY_NEW_OSCR" in next && !["HW4", "HW5"].includes(key))
+        next.ENABLE_ROTARY_NEW_OSCR = false;
       if (["DS3231", "DS1307"].includes(key)) {
         next.DS3231 = false;
         next.DS1307 = false;

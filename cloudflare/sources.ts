@@ -4,6 +4,7 @@ import { FirmwareError } from "../src/lib/errors";
 import type { FirmwareProject, FirmwareRelease } from "../src/lib/firmware";
 import type { BuildStore } from "./build-cache";
 import { gitRevision } from "./git-refs";
+import firmwareSource from "../firmware-source.mjs";
 
 type Timed<T> = { at: number; value: T; retryAt?: number };
 class GitHubError extends FirmwareError {
@@ -33,7 +34,7 @@ export class FirmwareSources {
   private async revision(id: string): Promise<string> {
     const ref = id === "latest" ? "HEAD" : id.slice("release:".length);
     try {
-      const response = await this.upstream(`https://api.github.com/repos/sanni/cartreader/commits/${encodeURIComponent(ref)}`, {
+      const response = await this.upstream(`https://api.github.com/repos/${firmwareSource.slug}/commits/${encodeURIComponent(ref)}`, {
         headers: { Accept: "application/vnd.github+json" },
       });
       const data = await response.json() as { sha?: unknown };
@@ -44,7 +45,7 @@ export class FirmwareSources {
       if (!(error instanceof GitHubError) || ![403, 429].includes(error.upstreamStatus)) throw error;
       // Public Git ref discovery does not consume the REST API quota. It
       // resolves current HEAD without substituting a stale cached revision.
-      const response = await this.upstream("https://github.com/sanni/cartreader.git/info/refs?service=git-upload-pack", {
+      const response = await this.upstream(`${firmwareSource.repository}/info/refs?service=git-upload-pack`, {
         headers: { Accept: "application/x-git-upload-pack-advertisement" },
         cache: "no-store",
       });
@@ -85,7 +86,7 @@ export class FirmwareSources {
     const prepared = await this.store.get(projectKey);
     let project = prepared ? await prepared.json<FirmwareProject>() : null;
     if (!project) {
-      const raw = `https://raw.githubusercontent.com/sanni/cartreader/${revision}/Cart_Reader`;
+      const raw = `https://raw.githubusercontent.com/${firmwareSource.slug}/${revision}/${firmwareSource.sketch}`;
       const [config, cpp] = await Promise.all([this.upstream(`${raw}/Config.h`), this.upstream(`${raw}/OSCR.cpp`)]);
       project = projectFromSource(await config.text(), await cpp.text(), revision);
       await this.store.put(projectKey, JSON.stringify(project));

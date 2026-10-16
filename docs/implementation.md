@@ -30,7 +30,7 @@ No hardware selection, conflicting dependent options, numeric injection, compila
 
 ## Firmware source dependency
 
-The application references https://github.com/sanni/cartreader.git using remote HEAD. Each setup run fetches the latest default-branch commit and downloads the sketch and license into the ignored .firmware-cache/cartreader cache, and both configuration parsing and compilation use that path. Development, production builds, and tests refresh the cache automatically and require network access. Failed update checks stop setup; local cache edits are preserved and reported. The previous embedded firmware checkout was removed from the application Git index and preserved as an ignored cache.
+The application references https://github.com/OSCR-User-Group/cartreader.git using remote HEAD; published releases are listed from the same repository. Each setup run fetches the latest default-branch commit and downloads the sketch and license into the ignored .firmware-cache/cartreader cache, and both configuration parsing and compilation use that path. Development, production builds, and tests refresh the cache automatically and require network access. Failed update checks stop setup; local cache edits are preserved and reported. The previous embedded firmware checkout was removed from the application Git index and preserved as an ignored cache. Setup refuses a cache cloned from a different origin (for example the earlier sanni/cartreader source); move the .firmware-cache directory aside and setup will clone the configured repository again.
 
 ## Firmware version selection
 

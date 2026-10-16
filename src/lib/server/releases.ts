@@ -1,10 +1,11 @@
+import firmwareSource from "../../../firmware-source.mjs";
 import type { FirmwareRelease } from "../firmware";
 
 // Only published GitHub releases become selectable refs; never accept arbitrary refs from visitors.
 export async function fetchReleases(fetcher: typeof fetch = fetch): Promise<FirmwareRelease[]> {
   const releases: FirmwareRelease[] = [];
   for (let page = 1; page <= 10; page++) {
-    const response = await fetcher(`https://api.github.com/repos/sanni/cartreader/releases?per_page=100&page=${page}`, {
+    const response = await fetcher(`https://api.github.com/repos/${firmwareSource.slug}/releases?per_page=100&page=${page}`, {
       headers: { Accept: "application/vnd.github+json", "User-Agent": "cartreader-web-programmer" },
       signal: AbortSignal.timeout(15_000),
       cache: "no-store",

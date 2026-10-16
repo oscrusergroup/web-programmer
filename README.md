@@ -1,6 +1,6 @@
 # Cartridge Lab
 
-A Next.js + Tailwind CSS web programmer for the Open Source Cartridge Reader firmware from [sanni/cartreader](https://github.com/sanni/cartreader/). Visitors choose their hardware and firmware options, compile on the server, then upload to their Arduino Mega 2560 through Web Serial.
+A Next.js + Tailwind CSS web programmer for the Open Source Cartridge Reader firmware from [OSCR-User-Group/cartreader](https://github.com/OSCR-User-Group/cartreader/). Visitors choose their hardware and firmware options, compile on the server, then upload to their Arduino Mega 2560 through Web Serial.
 
 ## Run locally
 
@@ -113,4 +113,4 @@ pnpm run build
 
 Tests cover release discovery and errors, separate version snapshots, source revision validation, following upstream updates, preserving local cache edits, failed update checks, actual Config.h parsing and generation, invalid inputs, request boundaries, Intel HEX corruption and bootloader protection, simulated flash uploads across 128 KiB, wrong MCU detection and readback failure. The latest firmware and release V15.5 have both been compiled locally for HW5. A physical USB upload requires acceptance testing with a connected Mega 2560; simulated protocol tests cannot verify USB drivers, reset timing or a particular board's bootloader.
 
-The referenced firmware retains its [upstream GPL-3.0 license](https://github.com/sanni/cartreader/blob/HEAD/LICENSE), also fetched into the firmware cache. See `docs/implementation.md` for the implementation notes.
+The referenced firmware retains its [upstream GPL-3.0 license](https://github.com/OSCR-User-Group/cartreader/blob/HEAD/LICENSE), also fetched into the firmware cache. See `docs/implementation.md` for the implementation notes.

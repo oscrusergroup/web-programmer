@@ -75,3 +75,17 @@ test("rejects arbitrary defines, wrong types, incomplete payloads and code injec
   );
   assert.ok(validateSelection(schema, { HW5: true }).length);
 });
+test("new OSCR rotary display is a HW4/HW5 hardware module", () => {
+  const schema = parseConfig(source),
+    values = defaultSelection(schema);
+  const option = schema.find((o) => o.key === "ENABLE_ROTARY_NEW_OSCR");
+  assert.equal(option?.section, "HARDWARE MODULES");
+  assert.equal(option?.enabled, false);
+  values.HW3 = true;
+  values.ENABLE_ROTARY_NEW_OSCR = true;
+  assert.match(validateSelection(schema, values).join(), /rotary/i);
+  values.HW3 = false;
+  values.HW5 = true;
+  assert.deepEqual(validateSelection(schema, values), []);
+  assert.match(generateConfig(source, schema, values), /^#define ENABLE_ROTARY_NEW_OSCR\r?$/m);
+});

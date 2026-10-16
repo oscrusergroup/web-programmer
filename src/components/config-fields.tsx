@@ -124,15 +124,23 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
         <div className="mt-3 divide-y divide-line-soft">
           {schema
             .filter((o) => o.section === "HARDWARE MODULES")
-            .map((o) => (
-              <Toggle
-                key={o.key}
-                option={o}
-                value={!!values[o.key]}
-                disabled={disabled}
-                onChange={(v) => onChange(o.key, v)}
-              />
-            ))}
+            .map((o) => {
+              const rotaryOnly =
+                o.key === "ENABLE_ROTARY_NEW_OSCR" && !values.HW4 && !values.HW5;
+              return (
+                <Toggle
+                  key={o.key}
+                  option={
+                    rotaryOnly
+                      ? { ...o, description: `${o.description} Requires HW4 or HW5.` }
+                      : o
+                  }
+                  value={!!values[o.key]}
+                  disabled={disabled || rotaryOnly}
+                  onChange={(v) => onChange(o.key, v)}
+                />
+              );
+            })}
         </div>
       </div>
     </div>
