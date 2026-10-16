@@ -218,6 +218,13 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
   const rgb = String(values.OPTION_LCD_BG_COLOR)
     .split(",")
     .map((v) => v.trim());
+  const color = `#${[rgb[1], rgb[0], rgb[2]]
+    .map((channel) =>
+      Math.max(0, Math.min(255, Math.round(Number(channel) || 0)))
+        .toString(16)
+        .padStart(2, "0"),
+    )
+    .join("")}`;
   return (
     <div className="soft-enter">
       <h2 className="text-xl font-semibold tracking-tight">Make it your own</h2>
@@ -229,6 +236,22 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
         <p className="mt-1 text-xs text-muted">
           Color channels from 0 to 255. Used by LCD hardware.
         </p>
+        <label className="mt-3 block text-xs text-muted">
+          Backlight color
+          <input
+            type="color"
+            value={color}
+            disabled={disabled}
+            onChange={(e) => {
+              const hex = e.target.value;
+              const red = parseInt(hex.slice(1, 3), 16);
+              const green = parseInt(hex.slice(3, 5), 16);
+              const blue = parseInt(hex.slice(5, 7), 16);
+              onChange("OPTION_LCD_BG_COLOR", `${green}, ${red}, ${blue}`);
+            }}
+            className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-line bg-surface p-1 disabled:cursor-not-allowed disabled:opacity-50"
+          />
+        </label>
         <div className="mt-3 flex gap-3">
           {["Green", "Red", "Blue"].map((label, i) => (
             <label key={label} className="min-w-0 flex-1 text-xs text-muted">
