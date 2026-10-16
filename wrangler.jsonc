@@ -10,5 +10,11 @@
     { "binding": "FIRMWARE_SERVICE", "service": "cartreader-firmware" },
     { "binding": "WORKER_SELF_REFERENCE", "service": "cartreader-web-programmer" }
   ],
+  "previews": {
+    "vars": { "FIRMWARE_BACKEND": "cloudflare" },
+    "services": [
+      { "binding": "FIRMWARE_SERVICE", "service": "cartreader-firmware" }
+    ]
+  },
   "observability": { "enabled": true }
 }

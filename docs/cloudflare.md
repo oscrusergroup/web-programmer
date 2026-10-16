@@ -54,6 +54,16 @@ Workers Builds supplies `WRANGLER_CI_OVERRIDE_NAME` and `WRANGLER_CI_MATCH_TAG` 
 
 Before retrying the build, enable Workers Paid and R2 in the dashboard, then create `cartreader-build-cache` once through the dashboard or `pnpm run cf:bucket`. The build token must have permission to deploy both Workers, their Durable Object namespace, and Containers/registry images, and to access the R2 bucket. Cloudflare build settings are stored in the dashboard; changing this repository does not update an existing trigger's commands. See [Workers Builds configuration](https://developers.cloudflare.com/workers/ci-cd/builds/configuration/).
 
+### Branch previews
+
+Keep `main` as the production branch and enable **Preview Builds** under **Settings > Build > Branch control**. Use `pnpm run cf:build` as the build command and `pnpm exec wrangler preview` as the Preview command. Each push to another branch creates or updates its preview; the successful command prints the shareable URL. Workers Builds can also post that URL to a GitHub pull request.
+
+The `previews` block in `wrangler.jsonc` supplies `FIRMWARE_BACKEND=cloudflare` and the `FIRMWARE_SERVICE` binding explicitly because Worker Previews do not inherit production variables or bindings. The preview uses the existing `cartreader-firmware` service, compiler, and build cache. It tests the branch's website code against that deployed backend; backend code changes need a separate firmware deployment. The dynamically rendered website does not need the production `WORKER_SELF_REFERENCE` binding for preview cache revalidation.
+
+Keep firmware deployment out of the Preview command: `cf:deploy:firmware` publishes the shared backend. `pnpm run cf:preview` is a local OpenNext preview server, not the command for a hosted branch preview. See [Worker Preview configuration](https://developers.cloudflare.com/workers/previews/configuration/).
+
+If `wrangler preview` reports a missing `previews` block, commit and push the updated `wrangler.jsonc` to the branch. Retrying an older commit will still use its old configuration.
+
 If deployment fails with `R2 bucket 'cartreader-build-cache' not found` (code 10085), open **R2 Object Storage** in the same account as the Workers, complete R2 activation if prompted, and create a bucket named exactly `cartreader-build-cache`. Declaring the binding in `wrangler.firmware.jsonc` does not create this named bucket. If `cf:bucket` reports `Please enable R2 through the Cloudflare Dashboard` (code 10042), activation must be completed in the dashboard first. Then retry the deployment; no firmware settings need changing.
 
 If installation fails with `ERR_PNPM_MINIMUM_RELEASE_AGE_VIOLATION`, pnpm is rejecting dependencies published within its default 24-hour waiting period. `pnpm-workspace.yaml` lists exact-version exceptions for the Next.js and Cloudflare dependency versions already used in the verified build, including platform-specific SWC packages. These exceptions do not apply to future versions or unrelated packages. Keep the workspace file committed with the lockfile so a fresh CI install uses the same policy.
