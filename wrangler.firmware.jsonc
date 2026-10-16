@@ -19,5 +19,23 @@
     "instance_type": "standard-1",
     "max_instances": 1
   } ],
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "env": {
+    "preview": {
+      "name": "cartreader-firmware-preview",
+      "r2_buckets": [
+        { "binding": "BUILD_CACHE", "bucket_name": "cartreader-build-cache-preview" }
+      ],
+      "durable_objects": {
+        "bindings": [ { "name": "COMPILER", "class_name": "CompilerContainer" } ]
+      },
+      "containers": [ {
+        "class_name": "CompilerContainer",
+        "image": "./cloudflare/compiler/Dockerfile",
+        "image_build_context": ".",
+        "instance_type": "standard-1",
+        "max_instances": 1
+      } ]
+    }
+  }
 }

@@ -13,7 +13,7 @@
   "previews": {
     "vars": { "FIRMWARE_BACKEND": "cloudflare" },
     "services": [
-      { "binding": "FIRMWARE_SERVICE", "service": "cartreader-firmware" }
+      { "binding": "FIRMWARE_SERVICE", "service": "cartreader-firmware-preview" }
     ]
   },
   "observability": { "enabled": true }

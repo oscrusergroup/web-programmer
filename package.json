@@ -19,10 +19,13 @@
     "cf:preview": "node scripts/cloudflare.mjs preview",
     "cf:deploy:web": "node scripts/cloudflare.mjs deploy",
     "cf:deploy:firmware": "node scripts/cloudflare.mjs deploy-firmware",
+    "cf:deploy:firmware:preview": "node scripts/cloudflare.mjs deploy-firmware --env preview",
+    "cf:deploy:preview": "pnpm run cf:deploy:firmware:preview && pnpm exec wrangler preview",
     "cf:deploy": "pnpm run cf:deploy:firmware && pnpm run cf:build && pnpm run cf:deploy:web",
     "cf:dev:firmware": "wrangler dev --config wrangler.firmware.jsonc --port 8787",
     "cf:types": "wrangler types --include-runtime=false --config wrangler.firmware.jsonc cloudflare/worker-env.d.ts && wrangler types --env-interface CloudflareEnv cloudflare-env.d.ts",
-    "cf:bucket": "wrangler r2 bucket create cartreader-build-cache"
+    "cf:bucket": "wrangler r2 bucket create cartreader-build-cache",
+    "cf:bucket:preview": "wrangler r2 bucket create cartreader-build-cache-preview"
   },
   "dependencies": {
     "@cloudflare/containers": "^0.3.7",

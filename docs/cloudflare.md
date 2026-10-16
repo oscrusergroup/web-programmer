@@ -56,11 +56,21 @@ Before retrying the build, enable Workers Paid and R2 in the dashboard, then cre
 
 ### Branch previews
 
-Keep `main` as the production branch and enable **Preview Builds** under **Settings > Build > Branch control**. Use `pnpm run cf:build` as the build command and `pnpm exec wrangler preview` as the Preview command. Each push to another branch creates or updates its preview; the successful command prints the shareable URL. Workers Builds can also post that URL to a GitHub pull request.
+Keep `main` as the production branch and enable **Preview Builds** under **Settings > Build > Branch control**. Use `pnpm run cf:build` as the build command and `pnpm run cf:deploy:preview` as the Preview command. Each push to another branch deploys the testing backend and compiler image before creating or updating the website preview; the successful command prints the shareable URL. Workers Builds can also post that URL to a GitHub pull request.
 
-The `previews` block in `wrangler.jsonc` supplies `FIRMWARE_BACKEND=cloudflare` and the `FIRMWARE_SERVICE` binding explicitly because Worker Previews do not inherit production variables or bindings. The preview uses the existing `cartreader-firmware` service, compiler, and build cache. It tests the branch's website code against that deployed backend; backend code changes need a separate firmware deployment. The dynamically rendered website does not need the production `WORKER_SELF_REFERENCE` binding for preview cache revalidation.
+Create the separate preview cache once before the first deployment:
 
-Keep firmware deployment out of the Preview command: `cf:deploy:firmware` publishes the shared backend. `pnpm run cf:preview` is a local OpenNext preview server, not the command for a hosted branch preview. See [Worker Preview configuration](https://developers.cloudflare.com/workers/previews/configuration/).
+```sh
+pnpm run cf:bucket:preview
+```
+
+The `previews` block in `wrangler.jsonc` supplies `FIRMWARE_BACKEND=cloudflare` and binds `FIRMWARE_SERVICE` to `cartreader-firmware-preview`. The `preview` Wrangler environment in `wrangler.firmware.jsonc` deploys that private Worker with its own Durable Object namespace, compiler container, and `cartreader-build-cache-preview` R2 bucket. Production continues using `cartreader-firmware` and `cartreader-build-cache`. The dynamically rendered website does not need the production `WORKER_SELF_REFERENCE` binding for preview cache revalidation.
+
+All website branch previews share this one testing backend. The latest preview backend deployment determines which backend code they use; they are isolated from production, not from each other. Cloudflare service bindings cannot target another Worker's branch Preview, so the website binds to a separately deployed Worker instead. Both environments use the same account's included usage allowances. The preview compiler has the same one-instance limit and five-minute idle sleep as production.
+
+`cf:deploy:firmware:preview` runs the existing firmware deploy wrapper with `--env preview`, preserving the CI identity handling. The build token needs permission for the preview Worker, Containers/registry, Durable Objects, and preview R2 bucket. Secrets such as an optional `GITHUB_TOKEN` are not copied from production; set them independently with `pnpm exec wrangler secret put GITHUB_TOKEN --config wrangler.firmware.jsonc --env preview` if needed.
+
+For a local deployment with Docker running, use `pnpm run cf:build` followed by `pnpm run cf:deploy:preview`. Keep the production `cf:deploy:firmware` command out of the Preview command. `pnpm run cf:preview` is a local OpenNext preview server, not the command for a hosted branch preview. See [Worker Preview configuration](https://developers.cloudflare.com/workers/previews/configuration/) and [service-binding limitations](https://developers.cloudflare.com/workers/previews/resources/#service-bindings).
 
 If `wrangler preview` reports a missing `previews` block, commit and push the updated `wrangler.jsonc` to the branch. Retrying an older commit will still use its old configuration.
 
