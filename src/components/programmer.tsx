@@ -347,7 +347,7 @@ export function Programmer(initialProject: FirmwareProject) {
             </button>
             <a
               aria-label="The OSCR project"
-              href="https://github.com/oscartreader"
+              href="https://github.com/oscrusergroup"
               target="_blank"
               rel="noreferrer"
               className="flex items-center gap-1 text-muted hover:text-ink"
@@ -660,8 +660,7 @@ export function Programmer(initialProject: FirmwareProject) {
                       : "Upload to Arduino"}
                 </button>
                 <a
-                  href="/downloads/sd.zip"
-                  download
+                  href="https://github.com/oscrusergroup/sd-db/releases/latest/download/sd.zip"
                   className="mt-3 flex w-full items-center justify-center gap-1.5 text-[11px] text-muted hover:text-accent"
                 >
                   <Download size={12} />

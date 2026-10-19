@@ -1,6 +1,6 @@
 # Cartridge Lab
 
-A Next.js + Tailwind CSS web programmer for the Open Source Cartridge Reader firmware from [OSCR-User-Group/cartreader](https://github.com/OSCR-User-Group/cartreader/). Visitors choose their hardware and firmware options, compile on the server, then upload to their Arduino Mega 2560 through Web Serial.
+A Next.js + Tailwind CSS web programmer for the Open Source Cartridge Reader firmware from [oscrusergroup/firmware](https://github.com/oscrusergroup/firmware/). Visitors choose their hardware and firmware options, compile on the server, then upload to their Arduino Mega 2560 through Web Serial.
 
 ## Run locally
 
@@ -42,7 +42,7 @@ Each loaded version gets an immutable sketch snapshot under `.firmware-cache/bui
 
 `Config.h` can also be downloaded. Editing any setting invalidates the previous build. Browser permission is requested from the Connect button. USB serial adapters on clone boards are supported without restricting vendor IDs; the uploader checks the ATmega2560 device signature before writing.
 
-The SD download uses the supplied archive at `public/downloads/sd.zip`, independently of the selected firmware release. Keep this file in version control. The website serves it unchanged as a static download; builds do not fetch or regenerate SD files. Replace this file explicitly when a different SD archive is needed.
+The SD download links to `sd.zip` from the latest release of [oscrusergroup/sd-db](https://github.com/oscrusergroup/sd-db/releases/latest), independently of the selected firmware release. The site does not bundle, fetch or regenerate SD files; publishing a new sd-db release updates the download automatically.
 
 ## Serial monitor
 
@@ -113,4 +113,4 @@ pnpm run build
 
 Tests cover release discovery and errors, separate version snapshots, source revision validation, following upstream updates, preserving local cache edits, failed update checks, actual Config.h parsing and generation, invalid inputs, request boundaries, Intel HEX corruption and bootloader protection, simulated flash uploads across 128 KiB, wrong MCU detection and readback failure. The latest firmware and release V15.5 have both been compiled locally for HW5. A physical USB upload requires acceptance testing with a connected Mega 2560; simulated protocol tests cannot verify USB drivers, reset timing or a particular board's bootloader.
 
-The referenced firmware retains its [upstream GPL-3.0 license](https://github.com/OSCR-User-Group/cartreader/blob/HEAD/LICENSE), also fetched into the firmware cache. See `docs/implementation.md` for the implementation notes.
+The referenced firmware retains its [upstream GPL-3.0 license](https://github.com/oscrusergroup/firmware/blob/HEAD/LICENSE), also fetched into the firmware cache. See `docs/implementation.md` for the implementation notes.

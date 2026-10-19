@@ -54,15 +54,15 @@ for (const status of [403, 429]) test(`latest firmware loads and follows HEAD wh
   const sources = new FirmwareSources(store, "test-token", async (input, init) => {
     const url = String(input);
     const headers = new Headers(init?.headers);
-    if (url === "https://api.github.com/repos/OSCR-User-Group/cartreader/commits/HEAD")
+    if (url === "https://api.github.com/repos/oscrusergroup/firmware/commits/HEAD")
       return new Response("API rate limit exceeded", { status });
     assert.equal(headers.get("Authorization"), null, "API credentials must not reach public Git or raw hosts");
-    if (url === "https://github.com/OSCR-User-Group/cartreader.git/info/refs?service=git-upload-pack")
+    if (url === "https://github.com/oscrusergroup/firmware.git/info/refs?service=git-upload-pack")
       return new Response(gitAdvertisement([
         `${current} HEAD\0multi_ack symref=HEAD:refs/heads/main\n`,
         `${current} refs/heads/main\n`,
       ]), { headers: { "Content-Type": "application/x-git-upload-pack-advertisement" } });
-    assert.ok(url.startsWith(`https://raw.githubusercontent.com/OSCR-User-Group/cartreader/${current}/Cart_Reader/`));
+    assert.ok(url.startsWith(`https://raw.githubusercontent.com/oscrusergroup/firmware/${current}/Cart_Reader/`));
     return new Response(url.endsWith("Config.h") ? source : 'FSTRING_VERSION[] = "V15.6";');
   });
   assert.equal((await sources.project()).revision, revision);
