@@ -5,6 +5,7 @@
   "compatibility_date": "2026-09-30",
   "compatibility_flags": ["nodejs_compat"],
   "assets": { "directory": ".open-next/assets", "binding": "ASSETS" },
+  "routes": [ { "pattern": "programmer.oscruser.group", "custom_domain": true } ],
   "vars": { "FIRMWARE_BACKEND": "cloudflare" },
   "services": [
     { "binding": "FIRMWARE_SERVICE", "service": "cartreader-firmware" },
