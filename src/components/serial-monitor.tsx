@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, CircuitBoard, Clock, ClockArrowUp, Download, Send, Terminal, Trash2, Unplug, Usb } from "lucide-react";
+import { ArrowLeft, Clock, ClockArrowUp, Download, Send, Terminal, Trash2, Unplug, Usb } from "lucide-react";
 import { ThemeSelect } from "./theme-select";
 import { serialAPI } from "@/lib/serial/web-serial";
 import { openSerialMonitor, type LineEnding, type SerialMonitorSession } from "@/lib/serial/monitor";
@@ -259,12 +259,10 @@ export function SerialMonitor() {
     <div className="min-h-screen">
       <header className="border-b border-line bg-surface">
         <div className="mx-auto flex h-[76px] max-w-[1240px] items-center justify-between gap-3 px-5 sm:px-8">
-          <Link href="/" aria-label="Cartridge Lab home" className="flex items-center gap-3">
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white">
-              <CircuitBoard size={25} strokeWidth={1.6} />
-            </span>
-            <span className="hidden text-lg font-bold tracking-[-.6px] sm:inline">
-              cartridge<span className="font-normal text-muted">lab</span>
+          <Link href="/" aria-label="OSCR Programmer home" className="flex items-center gap-3">
+            <span className="flex shrink-0 flex-col whitespace-nowrap leading-none">
+              <span className="text-base font-bold tracking-[-.5px] sm:text-lg">OSCR Programmer</span>
+              <span className="mt-1 text-[10px] text-muted sm:text-[11px]">Open Source Cartridge Reader</span>
             </span>
           </Link>
           <nav aria-label="Main navigation" className="flex items-center gap-4 text-sm">

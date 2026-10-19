@@ -4,16 +4,15 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
-  ArrowUpRight,
   BookOpen,
   Check,
   CheckCircle2,
   ChevronRight,
   CircuitBoard,
   Code2,
-  Cpu,
   Download,
   Gamepad2,
+  Github,
   Info,
   LoaderCircle,
   RotateCcw,
@@ -320,13 +319,11 @@ export function Programmer(initialProject: FirmwareProject) {
           <a
             href="/"
             className="flex items-center gap-2 sm:gap-3"
-            aria-label="Cartridge Lab home"
+            aria-label="OSCR Programmer home"
           >
-            <span className="flex h-10 w-10 items-center justify-center rounded-xl bg-brand text-white">
-              <CircuitBoard size={25} strokeWidth={1.6} />
-            </span>
-            <span className="hidden text-lg font-bold tracking-[-.6px] sm:inline">
-              cartridge<span className="font-normal text-muted">lab</span>
+            <span className="flex shrink-0 flex-col whitespace-nowrap leading-none">
+              <span className="text-base font-bold tracking-[-.5px] sm:text-lg">OSCR Programmer</span>
+              <span className="mt-1 text-[10px] text-muted sm:text-[11px]">Open Source Cartridge Reader</span>
             </span>
           </a>
           <nav className="flex items-center gap-2 text-sm sm:gap-5">
@@ -346,14 +343,14 @@ export function Programmer(initialProject: FirmwareProject) {
               <span className="hidden sm:inline">Quick guide</span>
             </button>
             <a
-              aria-label="The OSCR project"
-              href="https://github.com/oscrusergroup"
+              aria-label="GitHub"
+              href="https://github.com/oscrusergroup/web-programmer"
               target="_blank"
               rel="noreferrer"
-              className="flex items-center gap-1 text-muted hover:text-ink"
+              className="flex items-center gap-2 text-muted hover:text-ink"
             >
-              <span className="hidden md:inline">The project</span>
-              <ArrowUpRight size={17} />
+              <Github size={16} aria-hidden="true" />
+              <span className="hidden sm:inline">GitHub</span>
             </a>
             <ThemeSelect />
           </nav>
@@ -362,18 +359,9 @@ export function Programmer(initialProject: FirmwareProject) {
       <main className="mx-auto max-w-[1240px] px-5 pt-10 pb-12 sm:px-8 sm:pt-12">
         <div className="mb-9 flex flex-wrap items-end justify-between gap-5">
           <div>
-            <div className="mb-3 flex items-center gap-2 text-xs font-medium text-muted">
-              <span className="h-1.5 w-1.5 rounded-full bg-brand" />
-              Open Source Cartridge Reader
-            </div>
             <h1 className="text-[29px] leading-tight font-semibold tracking-[-1.2px] sm:text-[38px]">
-              A fresh start for your reader.
+              Program your OSCR
             </h1>
-            <p className="mt-3 max-w-xl text-sm leading-6 text-muted">
-              Your hardware. Your favorite systems. Build and install custom
-              <br className="hidden sm:block" /> firmware, right here in your
-              browser.
-            </p>
           </div>
           <div className="mb-1 flex items-center gap-2 rounded-full border border-line bg-surface px-3 py-2 text-[11px] text-muted">
             <span
@@ -770,12 +758,14 @@ export function Programmer(initialProject: FirmwareProject) {
           </section>
         )}
         <footer className="mt-10 flex flex-wrap justify-between gap-3 border-t border-line pt-5 text-[11px] text-muted">
-          <p>Made for the joy of keeping games alive.</p>
-          <p className="flex items-center gap-1.5">
-            <Cpu size={12} />
-            Open Source Cartridge Reader <span className="px-1">/</span> GPL-3.0
-            firmware
-          </p>
+          <a
+            href="https://github.com/oscrusergroup/"
+            target="_blank"
+            rel="noreferrer"
+            className="hover:text-ink"
+          >
+            Open Source Cartridge Reader User Group
+          </a>
         </footer>
       </main>
       <dialog

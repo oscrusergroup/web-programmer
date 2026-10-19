@@ -1,4 +1,4 @@
-# Cartridge Lab
+# OSCR Programmer
 
 A Next.js + Tailwind CSS web programmer for the Open Source Cartridge Reader firmware from [oscrusergroup/firmware](https://github.com/oscrusergroup/firmware/). Visitors choose their hardware and firmware options, compile on the server, then upload to their Arduino Mega 2560 through Web Serial.
 
