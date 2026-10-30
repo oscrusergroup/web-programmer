@@ -196,18 +196,33 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
               const rotaryOnly =
                 o.key === "ENABLE_ROTARY_NEW_OSCR" && !values.HW4 && !values.HW5;
               return (
-                <Toggle
-                  key={o.key}
-                  option={
-                    rotaryOnly
-                      ? { ...o, description: `${o.description} Requires HW4 or HW5.` }
-                      : o
-                  }
-                  value={!!values[o.key]}
-                  disabled={disabled || rotaryOnly}
-                  onChange={(v) => onChange(o.key, v)}
-                  onInfo={o.key === "ENABLE_ROTARY_NEW_OSCR" ? () => displayInfo.current?.showModal() : undefined}
-                />
+                <div key={o.key}>
+                  <Toggle
+                    option={
+                      rotaryOnly
+                        ? { ...o, description: `${o.description} Requires HW4 or HW5.` }
+                        : o
+                    }
+                    value={!!values[o.key]}
+                    disabled={disabled || rotaryOnly}
+                    onChange={(v) => onChange(o.key, v)}
+                    onInfo={o.key === "ENABLE_ROTARY_NEW_OSCR" ? () => displayInfo.current?.showModal() : undefined}
+                  />
+                  {o.key === "ENABLE_RTC" && values.ENABLE_RTC && (
+                    <label className="block pb-4 text-xs font-semibold sm:w-1/2">
+                      RTC chip
+                      <select
+                        value={values.DS1307 ? "DS1307" : "DS3231"}
+                        disabled={disabled}
+                        onChange={(e) => onChange(e.target.value, true)}
+                        className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm [--select-inset:0.625rem]"
+                      >
+                        <option>DS3231</option>
+                        <option>DS1307</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
               );
             })}
         </div>
@@ -319,7 +334,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
               const blue = parseInt(hex.slice(5, 7), 16);
               onChange("OPTION_LCD_BG_COLOR", `${green}, ${red}, ${blue}`);
             }}
-            className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-line bg-surface p-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-line bg-surface disabled:cursor-not-allowed disabled:opacity-50"
           />
         </label>
         <div className="mt-3 flex gap-3">
@@ -344,21 +359,6 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
         </div>
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
-        <label className="text-xs font-semibold">
-          RTC chip
-          <select
-            value={values.DS1307 ? "DS1307" : "DS3231"}
-            disabled={disabled || !values.ENABLE_RTC}
-            onChange={(e) => onChange(e.target.value, true)}
-            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm [--select-inset:0.625rem] disabled:opacity-50"
-          >
-            <option>DS3231</option>
-            <option>DS1307</option>
-          </select>
-          <span className="mt-1 block font-normal text-muted">
-            Requires the RTC module.
-          </span>
-        </label>
         <label className="text-xs font-semibold">
           Mega Drive save format
           <select

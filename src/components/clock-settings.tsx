@@ -3,6 +3,7 @@
 import { useCallback, useEffect, useRef, useState } from "react";
 import { Clock, ClockArrowUp, Info, Unplug, Usb } from "lucide-react";
 import { serialAPI } from "@/lib/serial/web-serial";
+import { finishClockRequest, sendClockRequest, type ClockRequest } from "@/lib/serial/clock-request";
 import { openSerialMonitor, type SerialMonitorSession } from "@/lib/serial/monitor";
 import {
   clockSeconds, describeDrift, formatClock, GET_TIME_COMMAND, parseClockReply, setTimeCommand, type ClockZone,
@@ -10,7 +11,6 @@ import {
 
 type Status = "disconnected" | "connecting" | "connected" | "disconnecting";
 type ClockStatus = { tone: "info" | "ok" | "warn"; text: string };
-type ClockRequest = { kind: "check" | "set"; zone: ClockZone; timer: ReturnType<typeof setTimeout> };
 const CLOCK_BAUD = 9600;
 const CLOCK_REPLY_TIMEOUT_MS = 4000;
 const zoneLabels: Record<ClockZone, string> = { local: "local time", utc: "UTC" };
@@ -36,10 +36,7 @@ export function ClockSettings({ disabled = false, onConnectedChange }: {
   const generation = useRef(0);
   const sendActive = useRef(false);
 
-  const endClockRequest = useCallback(() => {
-    if (clockRequest.current) clearTimeout(clockRequest.current.timer);
-    clockRequest.current = null;
-  }, []);
+  const endClockRequest = useCallback(() => finishClockRequest(clockRequest), []);
 
   // Watch complete lines for replies to GETTIME / SETTIME.
   const watchClockReplies = useCallback((text: string) => {
@@ -163,29 +160,27 @@ export function ClockSettings({ disabled = false, onConnectedChange }: {
       // The OSCR sets whole seconds, so send right at the start of the next second.
       if (kind === "set") await new Promise<void>(resolve => setTimeout(resolve, 1000 - (Date.now() % 1000)));
       if (session.current !== current) return;
+      const command = kind === "set" ? setTimeCommand(clockSeconds(Date.now(), zone)) : GET_TIME_COMMAND;
       // The updater reads commands up to a newline.
-      await current.send(kind === "set" ? setTimeCommand(clockSeconds(Date.now(), zone)) : GET_TIME_COMMAND, "lf");
+      await sendClockRequest(clockRequest, { kind, zone }, {
+        timeoutMs: CLOCK_REPLY_TIMEOUT_MS,
+        onTimeout: () => {
+          if (mounted.current) setClockStatus({
+            tone: "warn",
+            text: "No reply. Clock commands need ENABLE_UPDATER and ENABLE_RTC in a HW3 or HW5 build (not Serial monitor), and the OSCR sitting at a menu.",
+          });
+        },
+        isStale: () => session.current !== current,
+      }, () => current.send(command, "lf"));
     } catch (failure) {
       if (mounted.current) {
         setClockStatus({ tone: "warn", text: failure instanceof Error ? failure.message : "Could not send the command." });
         await disconnect();
       }
-      return;
     } finally {
       sendActive.current = false;
       if (mounted.current) setSending(false);
     }
-    if (!mounted.current || session.current !== current) return;
-    clockRequest.current = {
-      kind, zone,
-      timer: setTimeout(() => {
-        clockRequest.current = null;
-        if (mounted.current) setClockStatus({
-          tone: "warn",
-          text: "No reply. Clock commands need ENABLE_UPDATER and ENABLE_RTC in a HW3 or HW5 build (not Serial monitor), and the OSCR sitting at a menu.",
-        });
-      }, CLOCK_REPLY_TIMEOUT_MS),
-    };
   }
 
   const connected = status === "connected";
