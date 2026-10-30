@@ -5,8 +5,11 @@ import {
   SlidersHorizontal,
   Cpu,
   CircuitBoard,
+  Info,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import Image from "next/image";
+import { useRef, useState, type RefObject } from "react";
 import {
   HARDWARE,
   CORE_SECTION,
@@ -33,16 +36,32 @@ export function Toggle({
   value,
   onChange,
   disabled,
+  onInfo,
 }: {
   option: ConfigOption;
   value: boolean;
   onChange: (value: boolean) => void;
   disabled: boolean;
+  onInfo?: () => void;
 }) {
   return (
     <label className="flex cursor-pointer items-start gap-4 py-4">
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">{option.label}</span>
+        <span className="flex items-center gap-1.5 text-sm font-semibold">
+          {option.label}
+          {onInfo && (
+            <button
+              type="button"
+              aria-label={`More about ${option.label}`}
+              title={`More about ${option.label}`}
+              // preventDefault keeps the surrounding label from toggling the switch.
+              onClick={(e) => { e.preventDefault(); onInfo(); }}
+              className="rounded-full text-muted hover:text-accent"
+            >
+              <Info size={15} />
+            </button>
+          )}
+        </span>
         <span className="mt-1 block text-xs leading-relaxed text-muted">
           {option.description || option.key}
         </span>
@@ -62,7 +81,56 @@ export function Toggle({
     </label>
   );
 }
+const displayPhotos = [
+  {
+    src: "/images/display-new-oscr.webp",
+    title: "New OSCR rotary display",
+    caption: "The OSCR-branded display board is visible to the left of the screen.",
+  },
+  {
+    src: "/images/display-regular.webp",
+    title: "Regular display",
+    caption: "The display board is hidden behind the case front.",
+  },
+];
+function RotaryDisplayInfo({ dialog }: { dialog: RefObject<HTMLDialogElement | null> }) {
+  return (
+    <dialog
+      ref={dialog}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) event.currentTarget.close();
+      }}
+      className="fixed inset-0 m-auto max-h-[90vh] w-[min(92vw,640px)] rounded-2xl border border-line bg-surface p-6 text-ink shadow-xl backdrop:bg-black/50"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Which display do you have?</h2>
+        <button aria-label="Close" onClick={() => dialog.current?.close()} className="rounded p-1 text-muted">
+          <X size={20} />
+        </button>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-muted">
+        Enable this option only if your HW4 or HW5 reader has the new OSCR-branded rotary display,
+        such as the HW5 sold by cartreader.net. Leave it off for the regular display.
+      </p>
+      <div className="mt-5 grid grid-cols-2 gap-4">
+        {displayPhotos.map((photo) => (
+          <figure key={photo.src}>
+            <div className="relative aspect-[3/4] overflow-hidden rounded-lg border border-line">
+              <Image src={photo.src} alt={`${photo.title} on a cartreader.net HW5 reader`} fill
+                sizes="(min-width: 640px) 300px, 45vw" className="object-cover" />
+            </div>
+            <figcaption className="mt-2 text-xs leading-5">
+              <span className="block font-semibold">{photo.title}</span>
+              <span className="text-muted">{photo.caption}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </dialog>
+  );
+}
 export function HardwareFields({ schema, values, onChange, disabled }: Props) {
+  const displayInfo = useRef<HTMLDialogElement>(null);
   return (
     <div className="soft-enter">
       <div className="mb-6">
@@ -138,11 +206,13 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
                   value={!!values[o.key]}
                   disabled={disabled || rotaryOnly}
                   onChange={(v) => onChange(o.key, v)}
+                  onInfo={o.key === "ENABLE_ROTARY_NEW_OSCR" ? () => displayInfo.current?.showModal() : undefined}
                 />
               );
             })}
         </div>
       </div>
+      <RotaryDisplayInfo dialog={displayInfo} />
     </div>
   );
 }
