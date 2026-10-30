@@ -37,6 +37,7 @@ import {
   type SerialPort,
 } from "@/lib/serial/web-serial";
 import { HardwareFields, CoreFields, OptionFields } from "./config-fields";
+import { ClockSettings } from "./clock-settings";
 import { ThemeSelect } from "./theme-select";
 import { isSupportedRelease } from "@/lib/release-options";
 import type { BuildResult, FirmwareProject, FirmwareRelease } from "@/lib/firmware";
@@ -109,6 +110,7 @@ export function Programmer(initialProject: FirmwareProject) {
     [uploaded, setUploaded] = useState(false),
     [elapsed, setElapsed] = useState(0);
   const [showLog, setShowLog] = useState(false);
+  const [clockConnected, setClockConnected] = useState(false);
   const guide = useRef<HTMLDialogElement>(null);
   const activeOperation = useRef(false);
   const hardware = HARDWARE.find((k) => values[k]);
@@ -287,7 +289,7 @@ export function Programmer(initialProject: FirmwareProject) {
     }
   }
   async function upload() {
-    if (!port || !build || activeOperation.current) return;
+    if (!port || !build || clockConnected || activeOperation.current) return;
     activeOperation.current = true;
     setBusy("upload");
     setElapsed(0);
@@ -631,7 +633,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 </div>
                 <button
                   onClick={upload}
-                  disabled={!!busy || !build || !port || !supported}
+                  disabled={!!busy || !build || !port || !supported || clockConnected}
                   className="button-secondary mt-4 w-full py-3!"
                 >
                   {busy === "upload" ? (
@@ -657,7 +659,9 @@ export function Programmer(initialProject: FirmwareProject) {
                 <p className="mt-4 text-center text-[10px] leading-5 text-muted">
                   {supported === false
                     ? "USB upload needs desktop Chrome or Edge over HTTPS. You can still download the SD card files."
-                    : "USB upload works in desktop Chrome and Edge."}
+                    : clockConnected
+                      ? "Disconnect the OSCR clock below before uploading."
+                      : "USB upload works in desktop Chrome and Edge."}
                 </p>
               </div>
             </section>
@@ -668,6 +672,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 exceed your reader’s memory.
               </p>
             </div>
+            <ClockSettings disabled={!!busy} onConnectedChange={setClockConnected} />
           </aside>
         </div>
         <div aria-live="polite" className="mt-5 space-y-3">
