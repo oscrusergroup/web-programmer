@@ -88,6 +88,17 @@ export function defaultSelection(schema: ConfigOption[]): Selection {
   );
 }
 
+export function validOptionValue(o: ConfigOption, v: unknown): boolean {
+  if (o.kind === "boolean") return typeof v === "boolean";
+  if (o.kind === "rgb")
+    return (
+      typeof v === "string" &&
+      /^\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}$/.test(v) &&
+      !v.split(",").some((n) => Number(n) > 255)
+    );
+  return v === false || ["0", "1", "2"].includes(v as string);
+}
+
 export function validateSelection(
   schema: ConfigOption[],
   input: unknown,
@@ -100,23 +111,13 @@ export function validateSelection(
   for (const key of Object.keys(values))
     if (!allowed.has(key)) errors.push(`Unknown option: ${key}`);
   for (const o of schema) {
-    const v = values[o.key];
-    if (o.kind === "boolean" && typeof v !== "boolean")
-      errors.push(`${o.key} must be a boolean.`);
-    if (
-      o.kind === "rgb" &&
-      (typeof v !== "string" ||
-        !/^\d{1,3}\s*,\s*\d{1,3}\s*,\s*\d{1,3}$/.test(v) ||
-        v.split(",").some((n) => Number(n) > 255))
-    )
+    if (validOptionValue(o, values[o.key])) continue;
+    if (o.kind === "boolean") errors.push(`${o.key} must be a boolean.`);
+    if (o.kind === "rgb")
       errors.push(
         "LCD color must contain three values from 0 to 255 (green, red, blue).",
       );
-    if (
-      o.kind === "save-type" &&
-      v !== false &&
-      !["0", "1", "2"].includes(v as string)
-    )
+    if (o.kind === "save-type")
       errors.push("Mega Drive save format must be disabled, 0, 1 or 2.");
   }
   if (HARDWARE.filter((k) => values[k] === true).length !== 1)

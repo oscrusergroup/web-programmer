@@ -2,21 +2,14 @@
 
 import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
-import { ArrowLeft, Clock, ClockArrowUp, Download, Send, Terminal, Trash2, Unplug, Usb } from "lucide-react";
+import { ArrowLeft, Download, Send, Terminal, Trash2, Unplug, Usb } from "lucide-react";
 import { ThemeSelect } from "./theme-select";
-import { serialAPI } from "@/lib/serial/web-serial";
+import { serialAPI, serialSupported } from "@/lib/serial/web-serial";
 import { openSerialMonitor, type LineEnding, type SerialMonitorSession } from "@/lib/serial/monitor";
-import {
-  clockSeconds, describeDrift, formatClock, GET_TIME_COMMAND, parseClockReply, setTimeCommand, type ClockZone,
-} from "@/lib/serial/oscr-time";
 
 const MAX_OUTPUT = 200_000;
 const baudRates = [300, 1200, 2400, 4800, 9600, 19200, 38400, 57600, 115200, 230400, 250000, 500000, 1000000];
 type Status = "disconnected" | "connecting" | "connected" | "disconnecting";
-type ClockStatus = { tone: "info" | "ok" | "warn"; text: string };
-type ClockRequest = { kind: "check" | "set"; zone: ClockZone; timer: ReturnType<typeof setTimeout> };
-const CLOCK_REPLY_TIMEOUT_MS = 4000;
-const zoneLabels: Record<ClockZone, string> = { local: "local time", utc: "UTC" };
 
 export function SerialMonitor() {
   const [supported, setSupported] = useState<boolean | null>(null);
@@ -28,10 +21,6 @@ export function SerialMonitor() {
   const [error, setError] = useState("");
   const [sending, setSending] = useState(false);
   const [autoScroll, setAutoScroll] = useState(true);
-  const [clockZone, setClockZone] = useState<ClockZone>("local");
-  const [clockStatus, setClockStatus] = useState<ClockStatus | null>(null);
-  const clockRequest = useRef<ClockRequest | null>(null);
-  const partialLine = useRef("");
   const session = useRef<SerialMonitorSession | null>(null);
   const mounted = useRef(false);
   const generation = useRef(0);
@@ -54,49 +43,9 @@ export function SerialMonitor() {
     });
   }, []);
 
-  const endClockRequest = useCallback(() => {
-    if (clockRequest.current) clearTimeout(clockRequest.current.timer);
-    clockRequest.current = null;
-  }, []);
-
-  // Watch complete lines for replies to GETTIME / SETTIME.
-  const watchClockReplies = useCallback((text: string) => {
-    const lines = (partialLine.current + text).split("\n");
-    partialLine.current = lines.pop()!.slice(-1024);
-    const request = clockRequest.current;
-    if (!request || !mounted.current) return;
-    for (const line of lines) {
-      const reading = parseClockReply(line);
-      if (reading !== undefined) {
-        const drift = reading - clockSeconds(Date.now(), request.zone);
-        endClockRequest();
-        setClockStatus({
-          tone: Math.abs(drift) <= 2 ? "ok" : "warn",
-          text: `${request.kind === "set" ? "Clock set. " : ""}OSCR reads ${formatClock(reading)}, ${describeDrift(drift)} (${zoneLabels[request.zone]}).`,
-        });
-        return;
-      }
-      if (line.includes("Module is not enabled")) {
-        endClockRequest();
-        setClockStatus({ tone: "warn", text: "This firmware has no real-time clock. Enable ENABLE_RTC (and your RTC chip) in the config, then flash again." });
-        return;
-      }
-      if (line.includes("Unknown Command")) {
-        endClockRequest();
-        setClockStatus({ tone: "warn", text: "The firmware didn't recognize the clock command. Flash a newer OSCR release with the updater enabled." });
-        return;
-      }
-    }
-  }, [endClockRequest]);
-
-  const receive = useCallback((text: string) => {
-    appendText(text);
-    watchClockReplies(text);
-  }, [appendText, watchClockReplies]);
-
   useEffect(() => {
     mounted.current = true;
-    setSupported(!!serialAPI() && window.isSecureContext);
+    setSupported(serialSupported());
     const release = () => {
       generation.current++;
       const current = session.current;
@@ -105,18 +54,15 @@ export function SerialMonitor() {
       if (mounted.current) setStatus("disconnected");
     };
     window.addEventListener("pagehide", release);
-    // FAT32 has no time zone: Linux reads file times as UTC, Windows and macOS as local time.
-    if (/Linux/.test(navigator.userAgent) && !/Android|CrOS/.test(navigator.userAgent)) setClockZone("utc");
     return () => {
       mounted.current = false;
-      endClockRequest();
       window.removeEventListener("pagehide", release);
       release();
       if (frame.current !== null) cancelAnimationFrame(frame.current);
       frame.current = null;
       pendingText.current = "";
     };
-  }, [endClockRequest]);
+  }, []);
 
   useEffect(() => {
     if (autoScroll && consoleView.current)
@@ -138,13 +84,9 @@ export function SerialMonitor() {
         throw new Error("Open this page in desktop Chrome or Edge over HTTPS to use USB serial.");
       const port = await api.requestPort();
       if (!mounted.current || attempt !== generation.current) return;
-      partialLine.current = "";
-      endClockRequest();
-      setClockStatus(null);
-      const connection = await openSerialMonitor(port, baud, receive, failure => {
+      const connection = await openSerialMonitor(port, baud, appendText, failure => {
         if (!mounted.current || attempt !== generation.current) return;
         session.current = null;
-        endClockRequest();
         setStatus("disconnected");
         setError(failure.message);
       });
@@ -164,7 +106,6 @@ export function SerialMonitor() {
 
   async function disconnect() {
     generation.current++;
-    endClockRequest();
     const current = session.current;
     session.current = null;
     setStatus("disconnecting");
@@ -178,16 +119,14 @@ export function SerialMonitor() {
   }
 
   /** Sends text to the device, one transmission at a time. Returns false if it failed. */
-  async function transmit(text: string | (() => string), lineEnding: LineEnding, beforeSend?: () => Promise<void>) {
+  async function transmit(text: string, lineEnding: LineEnding) {
     const current = session.current;
     if (!current || sendActive.current) return false;
     sendActive.current = true;
     setSending(true);
     setError("");
     try {
-      await beforeSend?.();
-      if (session.current !== current) return false;
-      await current.send(typeof text === "function" ? text() : text, lineEnding);
+      await current.send(text, lineEnding);
       return mounted.current && session.current === current;
     } catch (failure) {
       if (mounted.current) {
@@ -205,35 +144,6 @@ export function SerialMonitor() {
     event.preventDefault();
     if (!command.length && ending === "none") return;
     if (await transmit(command, ending)) setCommand("");
-  }
-
-  async function clockCommand(kind: "check" | "set") {
-    if (!session.current || sendActive.current) return;
-    const zone = clockZone;
-    endClockRequest();
-    setClockStatus({ tone: "info", text: kind === "set" ? "Setting the clock…" : "Asking the OSCR for the time…" });
-    // The OSCR sets whole seconds, so send right at the start of the next second.
-    const waitForSecond = () => new Promise<void>(resolve => setTimeout(resolve, 1000 - (Date.now() % 1000)));
-    // The updater reads commands up to a newline, whatever line ending is selected.
-    const sent = await transmit(
-      () => kind === "set" ? setTimeCommand(clockSeconds(Date.now(), zone)) : GET_TIME_COMMAND,
-      "lf",
-      kind === "set" ? waitForSecond : undefined,
-    );
-    if (!sent) {
-      if (mounted.current) setClockStatus(null);
-      return;
-    }
-    clockRequest.current = {
-      kind, zone,
-      timer: setTimeout(() => {
-        clockRequest.current = null;
-        if (mounted.current) setClockStatus({
-          tone: "warn",
-          text: "No reply. Clock commands need ENABLE_UPDATER and ENABLE_RTC in a HW3 or HW5 build (not Serial monitor), 9600 baud, and the OSCR sitting at a menu.",
-        });
-      }, CLOCK_REPLY_TIMEOUT_MS),
-    };
   }
 
   function clearOutput() {
@@ -337,25 +247,10 @@ export function SerialMonitor() {
             <input ref={input} id="serial-command" value={command} onChange={event => setCommand(event.target.value)} disabled={!connected || sending} autoComplete="off" spellCheck={false} placeholder="Enter a command, e.g. 0 or u" className="min-w-0 flex-1 rounded-lg border border-line bg-surface px-4 py-3 font-mono text-sm disabled:opacity-50" />
             <button type="submit" disabled={!connected || sending || (!command.length && ending === "none")} className="button-primary"><Send size={15} /> {sending ? "Sending…" : "Send"}</button>
           </form>
-          <div className="flex flex-col gap-3 border-t border-line-soft px-5 py-4 lg:flex-row lg:items-center">
-            <div className="flex flex-wrap items-center gap-3 lg:shrink-0">
-              <span className="flex items-center gap-2 text-xs font-medium"><Clock size={14} aria-hidden="true" /> OSCR clock</span>
-              <label className="sr-only" htmlFor="clock-zone">Clock time zone</label>
-              <select id="clock-zone" value={clockZone} onChange={event => setClockZone(event.target.value as ClockZone)} disabled={sending} className="rounded-lg border border-line bg-surface px-3 py-2 text-sm disabled:opacity-50">
-                <option value="local">Local time (Windows, macOS)</option>
-                <option value="utc">UTC (Linux)</option>
-              </select>
-              <button type="button" onClick={() => clockCommand("check")} disabled={!connected || sending} className="button-secondary"><Clock size={15} /> Check time</button>
-              <button type="button" onClick={() => clockCommand("set")} disabled={!connected || sending} className="button-secondary"><ClockArrowUp size={15} /> Set time</button>
-            </div>
-            <p role="status" className={`min-w-0 text-xs leading-5 ${clockStatus?.tone === "warn" ? "text-amber-700 dark:text-amber-300" : clockStatus?.tone === "ok" ? "text-emerald-700 dark:text-emerald-400" : "text-muted"}`}>
-              {clockStatus?.text ?? "Set time sends this computer's clock. Pick the zone of the computer you'll read the SD card on."}
-            </p>
-          </div>
         </section>
 
         <div className="mt-5 flex flex-wrap justify-between gap-3 text-xs leading-6 text-muted">
-          <p className="max-w-2xl">OSCR uses 9600 baud. The clock buttons use the firmware updater: enable <code>ENABLE_UPDATER</code> and <code>ENABLE_RTC</code> on HW3 or HW5 and wait at a menu. For Serial monitor firmware, send <code>u</code> or <code>d</code> to browse and <code>0–6</code> to select. Use no line ending for these commands.</p>
+          <p className="max-w-2xl">OSCR uses 9600 baud. To check or set the clock, use the OSCR clock panel on the programmer page. For Serial monitor firmware, send <code>u</code> or <code>d</code> to browse and <code>0–6</code> to select. Use no line ending for these commands.</p>
           <p>Disconnect before uploading firmware.</p>
         </div>
         <p className="mt-2 text-[11px] text-muted">The console keeps the most recent 200,000 characters. Save your log before leaving this page.</p>

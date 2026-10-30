@@ -27,3 +27,14 @@ Use case: background-extraction. Input image: edit target, [asset]. Primary requ
 
 Use case: stylized-concept. Asset type: hardware preview image for a cartridge-reader firmware programmer website. Primary request: an image of a desktop PC with a terminal on its screen, representing Serial Monitor mode. Style: clean isometric CAD-style 3D technical illustration with crisp outlined edges, matching schematic hardware product renders. Show a complete desktop monitor, compact PC tower and keyboard as one centered arrangement viewed from a slightly elevated three-quarter angle. Dark graphite equipment with subtle gray edge highlights; monitor displays a clearly recognizable black terminal window with a few simple lines of green monospace text and a green command prompt. Plain neutral charcoal background, no blue cast. Landscape 4:3 framing with modest margins; all computer parts fully visible without cropping. No people, no Arduino board, no brand logos, no decorative objects, no watermark.
 
+
+# Display comparison photos
+
+The info modal on the "New OSCR rotary display" option compares the two HW5 displays sold by cartreader.net.
+
+| Display | Asset | Dimensions | Source |
+| --- | --- | --- | --- |
+| New OSCR rotary display | `public/images/display-new-oscr.webp` | 750 × 1000 | User-provided photo |
+| Regular display | `public/images/display-regular.webp` | 750 × 1000 | User-provided photo |
+
+These are photos, so they were downscaled from 1500 × 2000 and converted with lossy `cwebp -q 82` rather than losslessly. Originals are in `docs/source-images/`.

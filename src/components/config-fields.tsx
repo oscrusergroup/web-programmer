@@ -5,8 +5,11 @@ import {
   SlidersHorizontal,
   Cpu,
   CircuitBoard,
+  Info,
+  X,
 } from "lucide-react";
-import { useState } from "react";
+import Image from "next/image";
+import { useId, useRef, useState, type RefObject } from "react";
 import {
   HARDWARE,
   CORE_SECTION,
@@ -33,22 +36,41 @@ export function Toggle({
   value,
   onChange,
   disabled,
+  onInfo,
 }: {
   option: ConfigOption;
   value: boolean;
   onChange: (value: boolean) => void;
   disabled: boolean;
+  onInfo?: () => void;
 }) {
+  const id = useId();
   return (
-    <label className="flex cursor-pointer items-start gap-4 py-4">
+    // htmlFor is required: an info button would otherwise become the label's target.
+    <label htmlFor={id} className="flex cursor-pointer items-start gap-4 py-4">
       <span className="min-w-0 flex-1">
-        <span className="block text-sm font-semibold">{option.label}</span>
+        <span className="flex items-center gap-1.5 text-sm font-semibold">
+          {option.label}
+          {onInfo && (
+            <button
+              type="button"
+              aria-label={`More about ${option.label}`}
+              title={`More about ${option.label}`}
+              // preventDefault keeps the surrounding label from toggling the switch.
+              onClick={(e) => { e.preventDefault(); onInfo(); }}
+              className="rounded-full text-muted hover:text-accent"
+            >
+              <Info size={15} />
+            </button>
+          )}
+        </span>
         <span className="mt-1 block text-xs leading-relaxed text-muted">
           {option.description || option.key}
         </span>
       </span>
       <span className="relative mt-0.5 inline-flex shrink-0">
         <input
+          id={id}
           className="peer sr-only"
           type="checkbox"
           checked={value}
@@ -62,7 +84,56 @@ export function Toggle({
     </label>
   );
 }
+const displayPhotos = [
+  {
+    src: "/images/display-new-oscr.webp",
+    title: "New OSCR rotary display",
+    caption: "The OSCR-branded display board is visible to the left of the screen.",
+  },
+  {
+    src: "/images/display-regular.webp",
+    title: "Regular display",
+    caption: "The display board is hidden behind the case front.",
+  },
+];
+function RotaryDisplayInfo({ dialog }: { dialog: RefObject<HTMLDialogElement | null> }) {
+  return (
+    <dialog
+      ref={dialog}
+      onClick={(event) => {
+        if (event.target === event.currentTarget) event.currentTarget.close();
+      }}
+      className="fixed inset-0 m-auto max-h-[90vh] w-[min(92vw,640px)] rounded-2xl border border-line bg-surface p-6 text-ink shadow-xl backdrop:bg-black/50"
+    >
+      <div className="flex items-center justify-between">
+        <h2 className="text-lg font-semibold">Which display do you have?</h2>
+        <button aria-label="Close" onClick={() => dialog.current?.close()} className="rounded p-1 text-muted">
+          <X size={20} />
+        </button>
+      </div>
+      <p className="mt-2 text-sm leading-6 text-muted">
+        Enable this option only if your HW4 or HW5 reader has the new OSCR-branded rotary display,
+        such as the HW5 sold by cartreader.net. Leave it off for the regular display.
+      </p>
+      <div className="mt-5 grid grid-cols-2 gap-4">
+        {displayPhotos.map((photo) => (
+          <figure key={photo.src}>
+            <div className="relative aspect-[3/4] overflow-hidden rounded-lg border border-line">
+              <Image src={photo.src} alt={`${photo.title} on a cartreader.net HW5 reader`} fill
+                sizes="(min-width: 640px) 300px, 45vw" className="object-cover" />
+            </div>
+            <figcaption className="mt-2 text-xs leading-5">
+              <span className="block font-semibold">{photo.title}</span>
+              <span className="text-muted">{photo.caption}</span>
+            </figcaption>
+          </figure>
+        ))}
+      </div>
+    </dialog>
+  );
+}
 export function HardwareFields({ schema, values, onChange, disabled }: Props) {
+  const displayInfo = useRef<HTMLDialogElement>(null);
   return (
     <div className="soft-enter">
       <div className="mb-6">
@@ -128,21 +199,38 @@ export function HardwareFields({ schema, values, onChange, disabled }: Props) {
               const rotaryOnly =
                 o.key === "ENABLE_ROTARY_NEW_OSCR" && !values.HW4 && !values.HW5;
               return (
-                <Toggle
-                  key={o.key}
-                  option={
-                    rotaryOnly
-                      ? { ...o, description: `${o.description} Requires HW4 or HW5.` }
-                      : o
-                  }
-                  value={!!values[o.key]}
-                  disabled={disabled || rotaryOnly}
-                  onChange={(v) => onChange(o.key, v)}
-                />
+                <div key={o.key}>
+                  <Toggle
+                    option={
+                      rotaryOnly
+                        ? { ...o, description: `${o.description} Requires HW4 or HW5.` }
+                        : o
+                    }
+                    value={!!values[o.key]}
+                    disabled={disabled || rotaryOnly}
+                    onChange={(v) => onChange(o.key, v)}
+                    onInfo={o.key === "ENABLE_ROTARY_NEW_OSCR" ? () => displayInfo.current?.showModal() : undefined}
+                  />
+                  {o.key === "ENABLE_RTC" && values.ENABLE_RTC && (
+                    <label className="block pb-4 text-xs font-semibold sm:w-1/2">
+                      RTC chip
+                      <select
+                        value={values.DS1307 ? "DS1307" : "DS3231"}
+                        disabled={disabled}
+                        onChange={(e) => onChange(e.target.value, true)}
+                        className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm [--select-inset:0.625rem]"
+                      >
+                        <option>DS3231</option>
+                        <option>DS1307</option>
+                      </select>
+                    </label>
+                  )}
+                </div>
               );
             })}
         </div>
       </div>
+      <RotaryDisplayInfo dialog={displayInfo} />
     </div>
   );
 }
@@ -249,7 +337,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
               const blue = parseInt(hex.slice(5, 7), 16);
               onChange("OPTION_LCD_BG_COLOR", `${green}, ${red}, ${blue}`);
             }}
-            className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-line bg-surface p-1 disabled:cursor-not-allowed disabled:opacity-50"
+            className="mt-1 block h-10 w-full cursor-pointer rounded-lg border border-line bg-surface disabled:cursor-not-allowed disabled:opacity-50"
           />
         </label>
         <div className="mt-3 flex gap-3">
@@ -275,21 +363,6 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
       </div>
       <div className="mt-4 grid gap-4 sm:grid-cols-2">
         <label className="text-xs font-semibold">
-          RTC chip
-          <select
-            value={values.DS1307 ? "DS1307" : "DS3231"}
-            disabled={disabled || !values.ENABLE_RTC}
-            onChange={(e) => onChange(e.target.value, true)}
-            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm disabled:opacity-50"
-          >
-            <option>DS3231</option>
-            <option>DS1307</option>
-          </select>
-          <span className="mt-1 block font-normal text-muted">
-            Requires the RTC module.
-          </span>
-        </label>
-        <label className="text-xs font-semibold">
           Mega Drive save format
           <select
             value={
@@ -304,7 +377,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
                 e.target.value === "off" ? false : e.target.value,
               )
             }
-            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm"
+            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm [--select-inset:0.625rem]"
           >
             <option value="off">Firmware default</option>
             <option value="0">Raw bytes</option>
