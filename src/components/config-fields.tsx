@@ -280,7 +280,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
             value={values.DS1307 ? "DS1307" : "DS3231"}
             disabled={disabled || !values.ENABLE_RTC}
             onChange={(e) => onChange(e.target.value, true)}
-            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm disabled:opacity-50"
+            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm [--select-inset:0.625rem] disabled:opacity-50"
           >
             <option>DS3231</option>
             <option>DS1307</option>
@@ -304,7 +304,7 @@ export function OptionFields({ schema, values, onChange, disabled }: Props) {
                 e.target.value === "off" ? false : e.target.value,
               )
             }
-            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm"
+            className="mt-2 block w-full rounded-lg border border-line bg-surface p-2.5 text-sm [--select-inset:0.625rem]"
           >
             <option value="off">Firmware default</option>
             <option value="0">Raw bytes</option>
