@@ -578,7 +578,7 @@ export function Programmer(initialProject: FirmwareProject) {
                   aria-selected={step === i}
                   aria-controls={`panel-${i}`}
                   onClick={() => setStep(i)}
-                  className={`relative flex flex-1 items-center justify-center gap-2 border-b-2 px-2 py-5 text-xs font-semibold sm:text-sm ${step === i ? "border-accent text-accent" : "border-transparent text-muted hover:bg-surface-soft"}`}
+                  className={`relative flex flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-5 text-xs font-semibold sm:text-sm ${step === i ? "border-accent text-accent" : "border-transparent text-muted hover:bg-surface-soft"}`}
                 >
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === i ? "bg-brand text-white" : "bg-surface-raised text-muted"}`}
@@ -588,8 +588,11 @@ export function Programmer(initialProject: FirmwareProject) {
                   <Icon size={16} className="hidden sm:block" />
                   {title}
                   {i === 1 && (
-                    <span className="hidden rounded bg-surface-raised px-1.5 py-0.5 text-[10px] sm:block">
+                    <span
+                      className={`hidden rounded border px-1.5 py-0.5 font-mono text-[10px] font-normal tabular-nums sm:block ${step === i ? "border-selected-border bg-selected" : "border-line-strong"}`}
+                    >
                       {coreCount}
+                      <span className="sr-only"> selected</span>
                     </span>
                   )}
                 </button>
