@@ -40,6 +40,20 @@ import { HardwareFields, CoreFields, OptionFields } from "./config-fields";
 import { ClockSettings } from "./clock-settings";
 import { ThemeSelect } from "./theme-select";
 import { isSupportedRelease } from "@/lib/release-options";
+import {
+  applyPreset,
+  loadUserPresets,
+  parsePresetFile,
+  presetFile,
+  presetFileName,
+  rebasePreset,
+  sameSelection,
+  saveUserPresets,
+  uniqueName,
+  type Preset,
+} from "@/lib/presets";
+import { BUILT_IN_PRESETS } from "@/presets";
+import { PresetPicker, presetKey } from "./preset-picker";
 import type { BuildResult, FirmwareProject, FirmwareRelease } from "@/lib/firmware";
 
 type Build = BuildResult;
@@ -76,8 +90,8 @@ const hardwarePreviews: Partial<Record<string, {
     alt: "Desktop PC displaying a serial terminal",
   },
 };
-function download(name: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
+function download(name: string, content: string, type = "text/plain") {
+  const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -97,6 +111,12 @@ export function Programmer(initialProject: FirmwareProject) {
   const [values, setValues] = useState<Selection>(() =>
     defaultSelection(schema),
   );
+  // Loaded from localStorage after mount; null when storage is blocked.
+  const [userPresets, setUserPresets] = useState<Preset[] | null>([]);
+  const [presetsLoaded, setPresetsLoaded] = useState(false);
+  const [presetId, setPresetId] = useState(""),
+    [presetNote, setPresetNote] = useState(""),
+    [presetError, setPresetError] = useState("");
   const [step, setStep] = useState(0),
     [supported, setSupported] = useState<boolean | null>(null);
   const [compiler, setCompiler] = useState<boolean | null>(null),
@@ -118,6 +138,11 @@ export function Programmer(initialProject: FirmwareProject) {
   const coreCount = schema.filter(
     (o) => o.section === CORE_SECTION && values[o.key],
   ).length;
+  const allPresets = [...BUILT_IN_PRESETS, ...(userPresets ?? [])];
+  const preset = allPresets.find((p) => presetKey(p) === presetId);
+  // Derived rather than flagged, so undoing a change clears "(modified)".
+  const presetModified = !!preset &&
+    !sameSelection(values, applyPreset(schema, preset.values).values);
   const errors = validateSelection(schema, values),
     warnings = configurationWarnings(values);
   async function loadReleases() {
@@ -151,7 +176,10 @@ export function Programmer(initialProject: FirmwareProject) {
       const data = await response.json() as FirmwareProject & { error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load firmware.");
       setProject(data);
-      setValues(defaultSelection(data.schema));
+      if (preset) {
+        setValues(rebasePreset(schema, data.schema, preset.values, values));
+        setPresetNote(skippedNote(applyPreset(data.schema, preset.values).skipped));
+      } else setValues(defaultSelection(data.schema));
       setStep(0);
       setFirmwareReady(true);
     } catch (error) {
@@ -182,6 +210,30 @@ export function Programmer(initialProject: FirmwareProject) {
     api?.addEventListener("disconnect", disconnected);
     return () => api?.removeEventListener("disconnect", disconnected);
   }, []);
+  useEffect(() => {
+    // Read after mount: the page is server-rendered without storage or the query.
+    const stored = loadUserPresets();
+    setUserPresets(stored);
+    const id = new URLSearchParams(window.location.search).get("preset");
+    if (id) {
+      const linked = BUILT_IN_PRESETS.find((p) => p.id === id);
+      if (linked) {
+        const applied = applyPreset(initialProject.schema, linked.values);
+        setValues(applied.values);
+        setPresetId(presetKey(linked));
+        setPresetNote(skippedNote(applied.skipped));
+      } else setPresetError(`Preset “${id}” was not found.`);
+    }
+    setPresetsLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!presetsLoaded) return;
+    // Only unmodified built-ins are linkable.
+    const url = new URL(window.location.href);
+    if (preset?.builtIn && !presetModified) url.searchParams.set("preset", preset.id);
+    else url.searchParams.delete("preset");
+    if (url.href !== window.location.href) window.history.replaceState(null, "", url);
+  }, [presetsLoaded, preset, presetModified]);
   useEffect(() => {
     if (!busy) return;
     const start = Date.now();
@@ -222,6 +274,8 @@ export function Programmer(initialProject: FirmwareProject) {
   }
   function restore() {
     if (activeOperation.current) return;
+    setPresetId("");
+    setPresetNote("");
     setValues({
       ...defaultSelection(schema),
       ...(hardware ? { [hardware]: true } : {}),
@@ -231,6 +285,81 @@ export function Programmer(initialProject: FirmwareProject) {
     setError("");
     setLog("");
     setShowLog(false);
+  }
+  function skippedNote(skipped: number) {
+    return skipped
+      ? `${skipped} ${skipped === 1 ? "setting" : "settings"} in this preset ${skipped === 1 ? "doesn't" : "don't"} exist in this firmware version and ${skipped === 1 ? "was" : "were"} skipped.`
+      : "";
+  }
+  function choosePreset(next?: Preset) {
+    if (activeOperation.current) return;
+    setPresetId(next ? presetKey(next) : "");
+    setPresetError("");
+    setPresetNote("");
+    if (!next) return restore();
+    const applied = applyPreset(schema, next.values);
+    setValues(applied.values);
+    setPresetNote(skippedNote(applied.skipped));
+    setBuild(null);
+    setUploaded(false);
+    setError("");
+    setLog("");
+    setShowLog(false);
+  }
+  function storeUserPresets(next: Preset[]) {
+    if (!saveUserPresets(next)) {
+      setPresetError("Your browser couldn't save presets. Check its storage settings.");
+      return false;
+    }
+    setUserPresets(next);
+    return true;
+  }
+  function savePreset(mode: "new" | "edit", name: string, description: string) {
+    const list = userPresets ?? [];
+    const taken = allPresets.filter((p) => mode === "new" || p !== preset).map((p) => p.name);
+    const saved: Preset = mode === "edit" && preset && !preset.builtIn
+      ? { ...preset, name: uniqueName(name, taken), description }
+      : { id: crypto.randomUUID(), builtIn: false, name: uniqueName(name, taken), description, values };
+    const next = mode === "edit" ? list.map((p) => (p.id === saved.id ? saved : p)) : [...list, saved];
+    if (!storeUserPresets(next)) return;
+    setPresetError("");
+    // Saving as new captures the on-screen values, so the new preset starts unmodified.
+    setPresetId(presetKey(saved));
+    if (mode === "new") setPresetNote("");
+  }
+  function updatePreset() {
+    if (!preset || preset.builtIn) return;
+    const saved = { ...preset, values };
+    if (storeUserPresets((userPresets ?? []).map((p) => (p.id === saved.id ? saved : p))))
+      setPresetNote("");
+  }
+  function deletePreset() {
+    if (!preset || preset.builtIn) return;
+    if (!storeUserPresets((userPresets ?? []).filter((p) => p.id !== preset.id))) return;
+    setPresetId("");
+    setPresetNote("");
+  }
+  async function importPreset(file: File) {
+    try {
+      const data = parsePresetFile(await file.text());
+      const imported: Preset = {
+        ...data,
+        id: crypto.randomUUID(),
+        builtIn: false,
+        name: uniqueName(data.name, allPresets.map((p) => p.name)),
+      };
+      if (storeUserPresets([...(userPresets ?? []), imported])) choosePreset(imported);
+    } catch (error) {
+      setPresetError(error instanceof Error ? error.message : "Could not import this preset.");
+    }
+  }
+  function exportPreset() {
+    const data = {
+      name: preset?.name ?? "Custom configuration",
+      description: preset?.description ?? "",
+      values,
+    };
+    download(presetFileName(data.name), presetFile(data, { version, revision }), "application/json");
   }
   async function buildFirmware() {
     if (!firmwareReady || errors.length || activeOperation.current) return;
@@ -376,16 +505,18 @@ export function Programmer(initialProject: FirmwareProject) {
                 : "Compiler setup needed"}
           </div>
         </div>
-        <section className="panel mb-5 p-5 sm:p-6" aria-labelledby="firmware-source-heading">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="max-w-lg">
+        <div className="mb-5 grid items-stretch gap-5 md:grid-cols-2">
+          <section className="panel flex flex-col p-5 sm:p-6 md:order-last" aria-labelledby="firmware-source-heading">
+            <div>
               <h2 id="firmware-source-heading" className="text-sm font-semibold">Firmware source</h2>
               <p className="mt-1 text-xs leading-5 text-muted">
                 Use the latest repository code or choose a release from V15.0 onward.
-                Changing versions resets your configuration and previous build.
+                Changing versions clears your previous build and resets your configuration,
+                or reapplies the selected preset.
               </p>
             </div>
-            <div className="w-full sm:max-w-xs">
+            {/* Pinned to the bottom so it lines up with the preset panel when that is taller. */}
+            <div className="mt-auto pt-4">
               <label htmlFor="firmware-source" className="mb-2 block text-xs font-semibold">Code version</label>
               <select id="firmware-source" value={firmwareId} disabled={!!busy}
                 onChange={event => void selectFirmware(event.target.value)}
@@ -403,13 +534,31 @@ export function Programmer(initialProject: FirmwareProject) {
                 <button onClick={() => void loadReleases()} className="font-medium underline">Retry release list</button>
               </p>}
               {firmwareReady && <p className="mt-2 font-mono text-[10px] text-muted">{version} · {revision.slice(0, 12)}</p>}
+              {sourceError && <div role="alert" className="mt-4 rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs leading-5 text-red-800 dark:text-red-200">{sourceError}{" "}
+                <button disabled={!!busy} onClick={() => void selectFirmware(firmwareId)} className="font-medium underline">Retry version</button>
+              </div>}
+              {busy === "source" && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin" />Loading firmware options…</p>}
             </div>
-          </div>
-          {sourceError && <div role="alert" className="mt-4 rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs leading-5 text-red-800 dark:text-red-200">{sourceError}{" "}
-            <button disabled={!!busy} onClick={() => void selectFirmware(firmwareId)} className="font-medium underline">Retry version</button>
-          </div>}
-          {busy === "source" && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin" />Loading firmware options…</p>}
-        </section>
+          </section>
+          <section className="panel p-5 sm:p-6" aria-labelledby="preset-heading">
+            <PresetPicker
+              builtIns={BUILT_IN_PRESETS}
+              userPresets={userPresets ?? []}
+              selected={preset}
+              modified={presetModified}
+              note={presetNote}
+              error={presetError}
+              storageAvailable={userPresets !== null}
+              disabled={!!busy || !firmwareReady}
+              onSelect={(key) => choosePreset(allPresets.find((p) => presetKey(p) === key))}
+              onSave={savePreset}
+              onUpdate={updatePreset}
+              onDelete={deletePreset}
+              onImport={(file) => void importPreset(file)}
+              onExport={exportPreset}
+            />
+          </section>
+        </div>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_350px]">
           <section
             className="panel overflow-hidden"
