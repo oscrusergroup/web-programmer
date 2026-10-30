@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useCallback, useEffect, useRef, useState, type FormEvent } from "react";
 import { ArrowLeft, Download, Send, Terminal, Trash2, Unplug, Usb } from "lucide-react";
 import { ThemeSelect } from "./theme-select";
-import { serialAPI } from "@/lib/serial/web-serial";
+import { serialAPI, serialSupported } from "@/lib/serial/web-serial";
 import { openSerialMonitor, type LineEnding, type SerialMonitorSession } from "@/lib/serial/monitor";
 
 const MAX_OUTPUT = 200_000;
@@ -45,7 +45,7 @@ export function SerialMonitor() {
 
   useEffect(() => {
     mounted.current = true;
-    setSupported(!!serialAPI() && window.isSecureContext);
+    setSupported(serialSupported());
     const release = () => {
       generation.current++;
       const current = session.current;

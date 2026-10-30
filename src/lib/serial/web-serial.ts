@@ -22,6 +22,9 @@ export interface SerialAPI extends EventTarget {
 export function serialAPI(): SerialAPI | undefined {
   return (navigator as Navigator & { serial?: SerialAPI }).serial;
 }
+export function serialSupported(): boolean {
+  return !!serialAPI() && window.isSecureContext;
+}
 const pause = (ms: number) => new Promise((resolve) => setTimeout(resolve, ms));
 
 export class SerialTransport implements ByteTransport {

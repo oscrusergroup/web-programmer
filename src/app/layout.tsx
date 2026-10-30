@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { UnsupportedBrowserDialog } from "@/components/unsupported-browser-dialog";
 import { THEME_INIT_SCRIPT } from "@/lib/theme";
 import "./globals.css";
 export const metadata: Metadata = {
@@ -14,7 +15,10 @@ export default function RootLayout({
       <head>
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
-      <body>{children}</body>
+      <body>
+        {children}
+        <UnsupportedBrowserDialog />
+      </body>
     </html>
   );
 }

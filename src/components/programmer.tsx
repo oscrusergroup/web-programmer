@@ -33,6 +33,7 @@ import {
 } from "@/lib/config";
 import {
   serialAPI,
+  serialSupported,
   uploadFirmware,
   type SerialPort,
 } from "@/lib/serial/web-serial";
@@ -200,7 +201,7 @@ export function Programmer(initialProject: FirmwareProject) {
     }
   }
   useEffect(() => {
-    setSupported(!!serialAPI() && window.isSecureContext);
+    setSupported(serialSupported());
     void checkCompiler();
     void loadReleases();
     const api = serialAPI();
