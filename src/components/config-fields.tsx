@@ -9,7 +9,7 @@ import {
   X,
 } from "lucide-react";
 import Image from "next/image";
-import { useRef, useState, type RefObject } from "react";
+import { useId, useRef, useState, type RefObject } from "react";
 import {
   HARDWARE,
   CORE_SECTION,
@@ -44,8 +44,10 @@ export function Toggle({
   disabled: boolean;
   onInfo?: () => void;
 }) {
+  const id = useId();
   return (
-    <label className="flex cursor-pointer items-start gap-4 py-4">
+    // htmlFor is required: an info button would otherwise become the label's target.
+    <label htmlFor={id} className="flex cursor-pointer items-start gap-4 py-4">
       <span className="min-w-0 flex-1">
         <span className="flex items-center gap-1.5 text-sm font-semibold">
           {option.label}
@@ -68,6 +70,7 @@ export function Toggle({
       </span>
       <span className="relative mt-0.5 inline-flex shrink-0">
         <input
+          id={id}
           className="peer sr-only"
           type="checkbox"
           checked={value}

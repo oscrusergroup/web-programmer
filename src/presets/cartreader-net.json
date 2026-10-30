@@ -1,7 +1,7 @@
 {
   "format": "oscr-preset",
   "version": 1,
-  "name": "cartreader.net (new)",
+  "name": "cartreader.net",
   "description": "The HW5 OSCR from cartreader.net with new display.",
   "firmware": {
     "version": "V15.6",
@@ -34,7 +34,7 @@
     "ENABLE_VIC20": false,
     "ENABLE_ARC": false,
     "ENABLE_FAIRCHILD": false,
-    "ENABLE_FLASH": false,
+    "ENABLE_FLASH": true,
     "ENABLE_FLASH8": false,
     "ENABLE_FLASH16": false,
     "ENABLE_GBX": true,
@@ -42,7 +42,7 @@
     "ENABLE_LEAP": false,
     "ENABLE_NGP": false,
     "ENABLE_N64": true,
-    "ENABLE_CONTROLLERTEST": false,
+    "ENABLE_CONTROLLERTEST": true,
     "ENABLE_NES": true,
     "ENABLE_ODY2": false,
     "ENABLE_MSX": false,
@@ -51,7 +51,7 @@
     "ENABLE_RCA": false,
     "ENABLE_SMS": true,
     "ENABLE_MD": true,
-    "ENABLE_SFM": false,
+    "ENABLE_SFM": true,
     "ENABLE_SV": false,
     "ENABLE_ST": false,
     "ENABLE_GPC": false,
@@ -68,19 +68,19 @@
     "ENABLE_LOOPY": false,
     "ENABLE_CPS3": false,
     "ENABLE_CONFIG": true,
-    "OPTION_LCD_BG_COLOR": "100, 0, 0",
+    "OPTION_LCD_BG_COLOR": "100, 100, 100",
     "ENABLE_3V3FIX": false,
     "ENABLE_UPDATER": true,
     "ENABLE_SELFTEST": false,
     "ENABLE_GLOBAL_LOG": true,
     "DS3231": true,
     "DS1307": false,
-    "OPTION_CLOCKGEN_CALIBRATION": false,
+    "OPTION_CLOCKGEN_CALIBRATION": true,
     "OPTION_CLOCKGEN_USE_CALIBRATION": true,
     "use_md_conf": false,
     "OPTION_MD_DEFAULT_SAVE_TYPE": false,
     "OPTION_N64_FASTCRC": true,
     "OPTION_N64_SAVESUMMARY": false,
-    "OPTION_REVERSE_SORT": false
+    "OPTION_REVERSE_SORT": true
   }
 }
