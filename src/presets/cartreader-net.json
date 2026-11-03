@@ -4,8 +4,8 @@
   "name": "cartreader.net",
   "description": "The HW5 OSCR from cartreader.net with new display.",
   "firmware": {
-    "version": "V15.6",
-    "revision": "10ac9df99a5f12c43b42e7c065da4dff0cc93b58"
+    "version": "16.0",
+    "revision": "b1dd9e883b306f304201d64ac670213aa213f612"
   },
   "values": {
     "HW5": true,
@@ -71,8 +71,8 @@
     "OPTION_LCD_BG_COLOR": "100, 100, 100",
     "ENABLE_3V3FIX": false,
     "ENABLE_UPDATER": true,
-    "ENABLE_SELFTEST": false,
-    "ENABLE_GLOBAL_LOG": true,
+    "ENABLE_SELFTEST": true,
+    "ENABLE_GLOBAL_LOG": false,
     "DS3231": true,
     "DS1307": false,
     "OPTION_CLOCKGEN_CALIBRATION": true,
