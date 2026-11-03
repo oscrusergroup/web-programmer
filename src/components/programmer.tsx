@@ -38,7 +38,7 @@ import {
   type SerialPort,
 } from "@/lib/serial/web-serial";
 import { HardwareFields, CoreFields, OptionFields } from "./config-fields";
-import { ClockSettings } from "./clock-settings";
+import { ClockSettings, type ClockSettingsHandle } from "./clock-settings";
 import { ThemeSelect } from "./theme-select";
 import { isSupportedRelease } from "@/lib/release-options";
 import {
@@ -131,7 +131,8 @@ export function Programmer(initialProject: FirmwareProject) {
     [uploaded, setUploaded] = useState(false),
     [elapsed, setElapsed] = useState(0);
   const [showLog, setShowLog] = useState(false);
-  const [clockConnected, setClockConnected] = useState(false);
+  const [clockBusy, setClockBusy] = useState(false);
+  const clock = useRef<ClockSettingsHandle>(null);
   const guide = useRef<HTMLDialogElement>(null);
   const activeOperation = useRef(false);
   const hardware = HARDWARE.find((k) => values[k]);
@@ -397,12 +398,12 @@ export function Programmer(initialProject: FirmwareProject) {
     }
   }
   async function connect() {
-    if (activeOperation.current) return;
+    if (activeOperation.current || clockBusy) return;
     try {
       const api = serialAPI();
       if (!api)
         throw new Error(
-          "Open this page in desktop Chrome or Edge to connect over USB.",
+          "Open this page in desktop Chrome, Edge or Firefox to connect over USB.",
         );
       const selected = await api.requestPort();
       setPort(selected);
@@ -419,7 +420,7 @@ export function Programmer(initialProject: FirmwareProject) {
     }
   }
   async function upload() {
-    if (!port || !build || clockConnected || activeOperation.current) return;
+    if (!port || !build || clockBusy || activeOperation.current) return;
     activeOperation.current = true;
     setBusy("upload");
     setElapsed(0);
@@ -427,6 +428,8 @@ export function Programmer(initialProject: FirmwareProject) {
     setError("");
     setUploaded(false);
     try {
+      // The clock may be holding the port open at its own baud rate.
+      await clock.current?.release();
       await uploadFirmware(port, build.hex, (nextPhase, percent) => {
         setPhase(nextPhase);
         setProgress(percent);
@@ -731,7 +734,7 @@ export function Programmer(initialProject: FirmwareProject) {
                   )}
                   <button
                     onClick={buildFirmware}
-                    disabled={!!busy || !firmwareReady || !!errors.length || compiler !== true}
+                    disabled={!!busy || !firmwareReady || !!errors.length || compiler !== true || !supported}
                     className="button-primary w-full"
                   >
                     {busy === "build" ? (
@@ -772,12 +775,12 @@ export function Programmer(initialProject: FirmwareProject) {
                     </p>
                     <p className="mt-0.5 text-[10px] text-muted">
                       {port
-                        ? "Device checked before upload"
+                        ? "Used for uploads and the OSCR clock"
                         : "Use a USB data cable"}
                     </p>
                   </div>
                   <button
-                    disabled={!!busy || !supported}
+                    disabled={!!busy || !supported || clockBusy}
                     onClick={connect}
                     className="text-xs font-semibold text-accent disabled:text-muted"
                   >
@@ -786,7 +789,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 </div>
                 <button
                   onClick={upload}
-                  disabled={!!busy || !build || !port || !supported || clockConnected}
+                  disabled={!!busy || !build || !port || !supported || clockBusy}
                   className="button-secondary mt-4 w-full py-3!"
                 >
                   {busy === "upload" ? (
@@ -811,10 +814,8 @@ export function Programmer(initialProject: FirmwareProject) {
                 </a>
                 <p className="mt-4 text-center text-[10px] leading-5 text-muted">
                   {supported === false
-                    ? "USB upload needs desktop Chrome or Edge over HTTPS. You can still download the SD card files."
-                    : clockConnected
-                      ? "Disconnect the OSCR clock below before uploading."
-                      : "USB upload works in desktop Chrome and Edge."}
+                    ? "USB upload needs desktop Chrome, Edge or Firefox over HTTPS. You can still download the SD card files."
+                    : "USB upload works in desktop Chrome, Edge and Firefox."}
                 </p>
               </div>
             </section>
@@ -825,7 +826,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 exceed your reader’s memory.
               </p>
             </div>
-            <ClockSettings disabled={!!busy} onConnectedChange={setClockConnected} />
+            <ClockSettings ref={clock} port={port} disabled={!!busy || !supported} onBusyChange={setClockBusy} />
           </aside>
         </div>
         <div aria-live="polite" className="mt-5 space-y-3">
@@ -974,7 +975,7 @@ export function Programmer(initialProject: FirmwareProject) {
           </li>
         </ol>
         <div className="mt-5 rounded-lg bg-surface-soft p-4 text-xs leading-5 text-muted">
-          Use desktop Chrome or Edge. A hosted installation needs HTTPS and a
+          Use desktop Chrome, Edge or Firefox. A hosted installation needs HTTPS and a
           Node server with Arduino CLI. Your USB port is accessed only by your
           browser; configuration and compilation run on the server.
         </div>

@@ -16,8 +16,8 @@ export default function RootLayout({
         <script dangerouslySetInnerHTML={{ __html: THEME_INIT_SCRIPT }} />
       </head>
       <body>
-        {children}
         <UnsupportedBrowserDialog />
+        {children}
       </body>
     </html>
   );

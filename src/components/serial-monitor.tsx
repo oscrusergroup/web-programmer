@@ -81,7 +81,7 @@ export function SerialMonitor() {
     try {
       const api = serialAPI();
       if (!api || !window.isSecureContext)
-        throw new Error("Open this page in desktop Chrome or Edge over HTTPS to use USB serial.");
+        throw new Error("Open this page in desktop Chrome, Edge or Firefox over HTTPS to use USB serial.");
       const port = await api.requestPort();
       if (!mounted.current || attempt !== generation.current) return;
       const connection = await openSerialMonitor(port, baud, appendText, failure => {
@@ -199,11 +199,6 @@ export function SerialMonitor() {
           </p>
         </div>
 
-        {supported === false && (
-          <p role="alert" className="mb-5 rounded-xl border border-amber-200 bg-amber-50 p-4 text-sm text-amber-900 dark:border-amber-800 dark:bg-amber-950/40 dark:text-amber-200">
-            USB serial needs desktop Chrome or Edge over HTTPS. Open this page there to connect.
-          </p>
-        )}
         {error && <p role="alert" className="mb-5 rounded-xl border border-red-200 bg-red-50 p-4 text-sm text-red-800 dark:border-red-800 dark:bg-red-950/40 dark:text-red-200">{error}</p>}
 
         <section aria-label="Serial terminal" className="panel overflow-hidden">

@@ -12,7 +12,7 @@ pnpm run setup:arduino
 pnpm run dev
 ```
 
-Open http://localhost:3000 in desktop Chrome or Edge. The one-time setup installs Arduino CLI 1.3.1, the AVR core 1.8.6 and pinned libraries into `.tools/` and `.arduino/`. It verifies the CLI archive checksum and does not use a global Arduino installation. macOS uses the AVR compiler supplied by Arduino, which may require Rosetta on Apple Silicon. Windows needs `tar` on PATH (included in current Windows).
+Open http://localhost:3000 in desktop Chrome, Edge or Firefox. The one-time setup installs Arduino CLI 1.3.1, the AVR core 1.8.6 and pinned libraries into `.tools/` and `.arduino/`. It verifies the CLI archive checksum and does not use a global Arduino installation. macOS uses the AVR compiler supplied by Arduino, which may require Rosetta on Apple Silicon. Windows needs `tar` on PATH (included in current Windows).
 
 The interface still works before compiler setup, but building is disabled with setup instructions. `pnpm run dev` and `pnpm run build` use the supported Webpack bundler for predictable operation in environments with restricted Turbopack worker sockets.
 
@@ -46,7 +46,7 @@ The SD download links to `sd.zip` from the latest release of [oscrusergroup/sd-d
 
 ## Serial monitor
 
-Open **Serial monitor** from the programmer header, or visit `/serial-monitor`. In desktop Chrome or Edge, choose the baud rate and click **Connect Arduino**, then select your USB device. The console displays incoming text and lets you send commands with no ending, LF, CR, or CR + LF. Enter sends the command; a single space is also supported. Clear the console, save its text log, or disable autoscroll to read earlier output.
+Open **Serial monitor** from the programmer header, or visit `/serial-monitor`. In desktop Chrome, Edge or Firefox, choose the baud rate and click **Connect Arduino**, then select your USB device. The console displays incoming text and lets you send commands with no ending, LF, CR, or CR + LF. Enter sends the command; a single space is also supported. Clear the console, save its text log, or disable autoscroll to read earlier output.
 
 The defaults are **9600 baud** and **no line ending**, matching the OSCR firmware. Serial monitor firmware accepts `u` / `d` for menu navigation and `0`–`6` for selection. The console retains the latest 200,000 characters. Disconnect before uploading firmware; leaving the monitor page also releases the USB port. Serial communication stays in the visitor's browser and does not require a server endpoint.
 

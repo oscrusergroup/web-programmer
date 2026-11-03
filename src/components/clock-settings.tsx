@@ -1,181 +1,212 @@
 "use client";
 
-import { useCallback, useEffect, useRef, useState } from "react";
-import { Clock, ClockArrowUp, Info, Unplug, Usb } from "lucide-react";
-import { serialAPI } from "@/lib/serial/web-serial";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type Ref } from "react";
+import { Clock, ClockArrowUp, Info, LoaderCircle } from "lucide-react";
+import type { SerialPort } from "@/lib/serial/web-serial";
 import { finishClockRequest, sendClockRequest, type ClockRequest } from "@/lib/serial/clock-request";
 import { openSerialMonitor, type SerialMonitorSession } from "@/lib/serial/monitor";
 import {
   clockSeconds, describeDrift, formatClock, GET_TIME_COMMAND, parseClockReply, setTimeCommand, type ClockZone,
 } from "@/lib/serial/oscr-time";
 
-type Status = "disconnected" | "connecting" | "connected" | "disconnecting";
 type ClockStatus = { tone: "info" | "ok" | "warn"; text: string };
+type ClockReply =
+  | { type: "time"; seconds: number }
+  | { type: "no-rtc" | "unknown" | "timeout" | "closed" };
+type ClockSession = { port: SerialPort; monitor: SerialMonitorSession; ready: boolean };
+export type ClockSettingsHandle = { release(): Promise<void> };
+
 const CLOCK_BAUD = 9600;
 const CLOCK_REPLY_TIMEOUT_MS = 4000;
+// Opening the port resets the Arduino. The OSCR prints a version banner early
+// in setup, then mounts the SD card and draws a menu before it reads commands.
+const BOOT_BANNER_TIMEOUT_MS = 4000;
+const BOOT_REPLY_TIMEOUT_MS = 10000;
 const zoneLabels: Record<ClockZone, string> = { local: "local time", utc: "UTC" };
+const pause = (ms: number) => new Promise<void>(resolve => setTimeout(resolve, ms));
 
 /**
- * Checks and sets the OSCR's real-time clock over its own serial connection.
- * `disabled` closes the connection so another operation (e.g. an upload) can
- * use the port; `onConnectedChange` reports whether the port is held open.
+ * Checks and sets the OSCR's real-time clock on the port chosen for uploads.
+ * The port is opened at the updater's baud rate on first use and held until
+ * `release()` (e.g. before an upload) or the port changes. `onBusyChange`
+ * reports while a clock command is using the port.
  */
-export function ClockSettings({ disabled = false, onConnectedChange }: {
+export function ClockSettings({ port, disabled = false, onBusyChange, ref }: {
+  port: SerialPort | null;
   disabled?: boolean;
-  onConnectedChange?: (connected: boolean) => void;
+  onBusyChange?: (busy: boolean) => void;
+  ref?: Ref<ClockSettingsHandle>;
 }) {
-  const [supported, setSupported] = useState<boolean | null>(null);
-  const [status, setStatus] = useState<Status>("disconnected");
   const [sending, setSending] = useState(false);
   const [clockZone, setClockZone] = useState<ClockZone>("local");
   const [clockStatus, setClockStatus] = useState<ClockStatus | null>(null);
   const clockRequest = useRef<ClockRequest | null>(null);
+  const answer = useRef<((reply: ClockReply) => void) | null>(null);
+  const firstLine = useRef<(() => void) | null>(null);
   const partialLine = useRef("");
-  const session = useRef<SerialMonitorSession | null>(null);
+  const session = useRef<ClockSession | null>(null);
   const mounted = useRef(false);
   const generation = useRef(0);
   const sendActive = useRef(false);
 
   const endClockRequest = useCallback(() => finishClockRequest(clockRequest), []);
+  const settle = useCallback((reply: ClockReply) => {
+    const resolve = answer.current;
+    answer.current = null;
+    resolve?.(reply);
+  }, []);
 
-  // Watch complete lines for replies to GETTIME / SETTIME.
+  // Watch complete lines for the boot banner and replies to GETTIME / SETTIME.
   const watchClockReplies = useCallback((text: string) => {
     const lines = (partialLine.current + text).split("\n");
     partialLine.current = lines.pop()!.slice(-1024);
-    const request = clockRequest.current;
-    if (!request || !mounted.current) return;
+    if (lines.length) firstLine.current?.();
+    if (!clockRequest.current || !mounted.current) return;
     for (const line of lines) {
-      const reading = parseClockReply(line);
-      if (reading !== undefined) {
-        const drift = reading - clockSeconds(Date.now(), request.zone);
-        endClockRequest();
-        setClockStatus({
-          tone: Math.abs(drift) <= 2 ? "ok" : "warn",
-          text: `${request.kind === "set" ? "Clock set. " : ""}OSCR reads ${formatClock(reading)}, ${describeDrift(drift)} (${zoneLabels[request.zone]}).`,
-        });
-        return;
-      }
-      if (line.includes("Module is not enabled")) {
-        endClockRequest();
-        setClockStatus({ tone: "warn", text: "This firmware has no real-time clock. Enable ENABLE_RTC (and your RTC chip) in the config, then flash again." });
-        return;
-      }
-      if (line.includes("Unknown Command")) {
-        endClockRequest();
-        setClockStatus({ tone: "warn", text: "The firmware didn't recognize the clock command. Flash a newer OSCR release with the updater enabled." });
-        return;
-      }
+      const seconds = parseClockReply(line);
+      const reply: ClockReply | undefined = seconds !== undefined ? { type: "time", seconds }
+        : line.includes("Module is not enabled") ? { type: "no-rtc" }
+        : line.includes("Unknown Command") ? { type: "unknown" }
+        : undefined;
+      if (!reply) continue;
+      if (session.current) session.current.ready = true;
+      endClockRequest();
+      settle(reply);
+      return;
     }
-  }, [endClockRequest]);
+  }, [endClockRequest, settle]);
 
-  const release = useCallback(() => {
+  const release = useCallback(async () => {
     generation.current++;
     endClockRequest();
+    settle({ type: "closed" });
+    firstLine.current = null;
     const current = session.current;
     session.current = null;
-    void current?.close().catch(() => {});
-    if (mounted.current) setStatus("disconnected");
-  }, [endClockRequest]);
+    await current?.monitor.close().catch(() => {});
+  }, [endClockRequest, settle]);
+
+  useImperativeHandle(ref, () => ({ release }), [release]);
 
   useEffect(() => {
     mounted.current = true;
-    setSupported(!!serialAPI() && window.isSecureContext);
-    window.addEventListener("pagehide", release);
+    const leave = () => void release();
+    window.addEventListener("pagehide", leave);
     // FAT32 has no time zone: Linux reads file times as UTC, Windows and macOS as local time.
     if (/Linux/.test(navigator.userAgent) && !/Android|CrOS/.test(navigator.userAgent)) setClockZone("utc");
     return () => {
       mounted.current = false;
-      window.removeEventListener("pagehide", release);
-      release();
+      window.removeEventListener("pagehide", leave);
+      void release();
     };
   }, [release]);
 
   useEffect(() => {
-    if (disabled && session.current) release();
-  }, [disabled, release]);
+    if (session.current && session.current.port !== port) void release();
+    setClockStatus(null);
+  }, [port, release]);
 
   useEffect(() => {
-    onConnectedChange?.(status !== "disconnected");
-  }, [status, onConnectedChange]);
+    onBusyChange?.(sending);
+  }, [sending, onBusyChange]);
 
-  async function connect() {
-    if (status !== "disconnected" || disabled) return;
+  /** Opens `target` for clock commands and waits for the OSCR to restart. */
+  async function open(target: SerialPort): Promise<ClockSession | null> {
     const attempt = ++generation.current;
-    setStatus("connecting");
-    setClockStatus(null);
-    try {
-      const api = serialAPI();
-      if (!api || !window.isSecureContext)
-        throw new Error("Open this page in desktop Chrome or Edge over HTTPS to use USB serial.");
-      const port = await api.requestPort();
+    partialLine.current = "";
+    const banner = Promise.withResolvers<void>();
+    firstLine.current = banner.resolve;
+    const monitor = await openSerialMonitor(target, CLOCK_BAUD, watchClockReplies, failure => {
       if (!mounted.current || attempt !== generation.current) return;
-      partialLine.current = "";
+      session.current = null;
       endClockRequest();
-      const connection = await openSerialMonitor(port, CLOCK_BAUD, watchClockReplies, failure => {
-        if (!mounted.current || attempt !== generation.current) return;
-        session.current = null;
-        endClockRequest();
-        setStatus("disconnected");
-        setClockStatus({ tone: "warn", text: failure.message });
-      });
-      if (!mounted.current || attempt !== generation.current || connection.closed) {
-        await connection.close();
-        return;
-      }
-      session.current = connection;
-      setStatus("connected");
-      setClockStatus({ tone: "info", text: "Connected. Wait for the OSCR to reach its menu, then check or set the time." });
-    } catch (failure) {
-      if (!mounted.current || attempt !== generation.current) return;
-      setStatus("disconnected");
-      if (failure instanceof DOMException && failure.name === "NotFoundError") return;
-      setClockStatus({ tone: "warn", text: failure instanceof Error ? failure.message : "Could not open the serial port." });
+      settle({ type: "closed" });
+      setClockStatus({ tone: "warn", text: failure.message });
+    });
+    if (!mounted.current || attempt !== generation.current || monitor.closed) {
+      await monitor.close();
+      return null;
     }
+    const current: ClockSession = { port: target, monitor, ready: false };
+    session.current = current;
+    // Wait out the bootloader so commands reach the OSCR. A board without
+    // auto-reset sends no banner, so carry on after the timeout.
+    await Promise.race([banner.promise, pause(BOOT_BANNER_TIMEOUT_MS)]);
+    firstLine.current = null;
+    return session.current === current ? current : null;
   }
 
-  async function disconnect() {
-    generation.current++;
-    endClockRequest();
-    const current = session.current;
-    session.current = null;
-    setStatus("disconnecting");
-    try {
-      await current?.close();
-    } catch (failure) {
-      if (mounted.current) setClockStatus({ tone: "warn", text: failure instanceof Error ? failure.message : "Could not close the serial port." });
-    } finally {
-      if (mounted.current) setStatus("disconnected");
+  /** Sends `command` and resolves with the OSCR's reply, a timeout, or "closed". */
+  function ask(current: ClockSession, kind: "check" | "set", zone: ClockZone, command: string, timeoutMs: number) {
+    return new Promise<ClockReply>((resolve, reject) => {
+      answer.current = resolve;
+      // The updater reads commands up to a newline.
+      sendClockRequest(clockRequest, { kind, zone }, {
+        timeoutMs,
+        onTimeout: () => settle({ type: "timeout" }),
+        isStale: () => session.current !== current,
+      }, () => current.monitor.send(command, "lf")).catch(failure => {
+        if (answer.current === resolve) answer.current = null;
+        reject(failure);
+      });
+    });
+  }
+
+  function report(kind: "check" | "set", zone: ClockZone, reply: ClockReply) {
+    if (!mounted.current) return;
+    switch (reply.type) {
+      case "time": {
+        const drift = reply.seconds - clockSeconds(Date.now(), zone);
+        setClockStatus({
+          tone: Math.abs(drift) <= 2 ? "ok" : "warn",
+          text: `${kind === "set" ? "Clock set. " : ""}OSCR reads ${formatClock(reply.seconds)}, ${describeDrift(drift)} (${zoneLabels[zone]}).`,
+        });
+        break;
+      }
+      case "no-rtc":
+        setClockStatus({ tone: "warn", text: "This firmware has no real-time clock. Enable ENABLE_RTC (and your RTC chip) in the config, then flash again." });
+        break;
+      case "unknown":
+        setClockStatus({ tone: "warn", text: "The firmware didn't recognize the clock command. Flash a newer OSCR release with the updater enabled." });
+        break;
+      case "timeout":
+        setClockStatus({
+          tone: "warn",
+          text: "No reply. Clock commands need ENABLE_UPDATER and ENABLE_RTC in a HW3 or HW5 build (not Serial monitor), and the OSCR sitting at a menu.",
+        });
+        break;
     }
   }
 
   async function clockCommand(kind: "check" | "set") {
-    const current = session.current;
-    if (!current || sendActive.current) return;
+    if (!port || disabled || sendActive.current) return;
     const zone = clockZone;
-    endClockRequest();
     sendActive.current = true;
     setSending(true);
-    setClockStatus({ tone: "info", text: kind === "set" ? "Setting the clock…" : "Asking the OSCR for the time…" });
     try {
+      let current = session.current;
+      if (!current) {
+        setClockStatus({ tone: "info", text: "Connecting. The OSCR restarts when its USB port opens…" });
+        current = await open(port);
+        if (!current) return;
+      }
+      if (!current.ready) {
+        // Commands sent while the OSCR is still starting wait in its buffer,
+        // which would make SETTIME late. Wait for an answer first.
+        setClockStatus({ tone: "info", text: "Waiting for the OSCR to reach its menu…" });
+        const reply = await ask(current, "check", zone, GET_TIME_COMMAND, BOOT_REPLY_TIMEOUT_MS);
+        if (kind === "check" || reply.type !== "time") return report(kind, zone, reply);
+      }
+      setClockStatus({ tone: "info", text: kind === "set" ? "Setting the clock…" : "Asking the OSCR for the time…" });
       // The OSCR sets whole seconds, so send right at the start of the next second.
-      if (kind === "set") await new Promise<void>(resolve => setTimeout(resolve, 1000 - (Date.now() % 1000)));
+      if (kind === "set") await pause(1000 - (Date.now() % 1000));
       if (session.current !== current) return;
       const command = kind === "set" ? setTimeCommand(clockSeconds(Date.now(), zone)) : GET_TIME_COMMAND;
-      // The updater reads commands up to a newline.
-      await sendClockRequest(clockRequest, { kind, zone }, {
-        timeoutMs: CLOCK_REPLY_TIMEOUT_MS,
-        onTimeout: () => {
-          if (mounted.current) setClockStatus({
-            tone: "warn",
-            text: "No reply. Clock commands need ENABLE_UPDATER and ENABLE_RTC in a HW3 or HW5 build (not Serial monitor), and the OSCR sitting at a menu.",
-          });
-        },
-        isStale: () => session.current !== current,
-      }, () => current.send(command, "lf"));
+      report(kind, zone, await ask(current, kind, zone, command, CLOCK_REPLY_TIMEOUT_MS));
     } catch (failure) {
       if (mounted.current) {
-        setClockStatus({ tone: "warn", text: failure instanceof Error ? failure.message : "Could not send the command." });
-        await disconnect();
+        setClockStatus({ tone: "warn", text: failure instanceof Error ? failure.message : "Could not reach the OSCR." });
+        await release();
       }
     } finally {
       sendActive.current = false;
@@ -183,8 +214,7 @@ export function ClockSettings({ disabled = false, onConnectedChange }: {
     }
   }
 
-  const connected = status === "connected";
-  const busy = status === "connecting" || status === "disconnecting";
+  const ready = !!port && !disabled && !sending;
 
   return (
     <section className="panel p-5" aria-labelledby="clock-settings-heading">
@@ -192,10 +222,7 @@ export function ClockSettings({ disabled = false, onConnectedChange }: {
         <h2 id="clock-settings-heading" className="flex items-center gap-2 text-sm font-semibold">
           <Clock size={15} aria-hidden="true" /> OSCR clock
         </h2>
-        <button onClick={connected ? disconnect : connect} disabled={busy || disabled || supported !== true} className="flex items-center gap-1.5 text-xs font-semibold text-accent disabled:text-muted">
-          {connected ? <Unplug size={13} /> : <Usb size={13} />}
-          {connected ? "Disconnect" : status === "connecting" ? "Connecting…" : status === "disconnecting" ? "Disconnecting…" : "Connect"}
-        </button>
+        {sending && <LoaderCircle size={14} className="animate-spin text-muted" aria-hidden="true" />}
       </div>
       <p className="mt-2 flex gap-2 rounded-lg bg-surface-raised p-3 text-[11px] leading-5 text-muted">
         <Info size={14} className="mt-0.5 shrink-0" aria-hidden="true" />
@@ -207,11 +234,13 @@ export function ClockSettings({ disabled = false, onConnectedChange }: {
         <option value="utc">UTC (Linux)</option>
       </select>
       <div className="mt-3 grid grid-cols-2 gap-2">
-        <button type="button" onClick={() => clockCommand("check")} disabled={!connected || sending} className="button-secondary"><Clock size={15} /> Check time</button>
-        <button type="button" onClick={() => clockCommand("set")} disabled={!connected || sending} className="button-secondary"><ClockArrowUp size={15} /> Set time</button>
+        <button type="button" onClick={() => clockCommand("check")} disabled={!ready} className="button-secondary"><Clock size={15} /> Check time</button>
+        <button type="button" onClick={() => clockCommand("set")} disabled={!ready} className="button-secondary"><ClockArrowUp size={15} /> Set time</button>
       </div>
       <p role="status" className={`mt-3 text-[11px] leading-5 ${clockStatus?.tone === "warn" ? "text-amber-700 dark:text-amber-300" : clockStatus?.tone === "ok" ? "text-emerald-700 dark:text-emerald-400" : "text-muted"}`}>
-        {clockStatus?.text ?? "Set time sends this computer's clock. Pick the zone of the computer you'll read the SD card on. Disconnect before uploading firmware."}
+        {clockStatus?.text ?? (port
+          ? "Set time sends this computer's clock. Pick the zone of the computer you'll read the SD card on. The first command restarts the OSCR."
+          : "Connect your Arduino above to check or set the time.")}
       </p>
     </section>
   );
