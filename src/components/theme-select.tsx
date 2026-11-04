@@ -51,7 +51,7 @@ export function ThemeSelect() {
           applyTheme(next);
           try { localStorage.setItem(THEME_STORAGE_KEY, next); } catch {}
         }}
-        className="cursor-pointer rounded bg-surface-soft text-xs font-medium text-ink"
+        className="rounded bg-surface-soft text-xs font-medium text-ink [--select-inset:0px]"
       >
         <option value="system">System</option>
         <option value="light">Light</option>

@@ -33,12 +33,28 @@ import {
 } from "@/lib/config";
 import {
   serialAPI,
+  serialSupported,
   uploadFirmware,
   type SerialPort,
 } from "@/lib/serial/web-serial";
 import { HardwareFields, CoreFields, OptionFields } from "./config-fields";
+import { ClockSettings, type ClockSettingsHandle } from "./clock-settings";
 import { ThemeSelect } from "./theme-select";
 import { isSupportedRelease } from "@/lib/release-options";
+import {
+  applyPreset,
+  loadUserPresets,
+  parsePresetFile,
+  presetFile,
+  presetFileName,
+  rebasePreset,
+  sameSelection,
+  saveUserPresets,
+  uniqueName,
+  type Preset,
+} from "@/lib/presets";
+import { BUILT_IN_PRESETS } from "@/presets";
+import { PresetPicker, presetKey } from "./preset-picker";
 import type { BuildResult, FirmwareProject, FirmwareRelease } from "@/lib/firmware";
 
 type Build = BuildResult;
@@ -75,8 +91,8 @@ const hardwarePreviews: Partial<Record<string, {
     alt: "Desktop PC displaying a serial terminal",
   },
 };
-function download(name: string, content: string) {
-  const url = URL.createObjectURL(new Blob([content], { type: "text/plain" }));
+function download(name: string, content: string, type = "text/plain") {
+  const url = URL.createObjectURL(new Blob([content], { type }));
   const a = document.createElement("a");
   a.href = url;
   a.download = name;
@@ -96,6 +112,12 @@ export function Programmer(initialProject: FirmwareProject) {
   const [values, setValues] = useState<Selection>(() =>
     defaultSelection(schema),
   );
+  // Loaded from localStorage after mount; null when storage is blocked.
+  const [userPresets, setUserPresets] = useState<Preset[] | null>([]);
+  const [presetsLoaded, setPresetsLoaded] = useState(false);
+  const [presetId, setPresetId] = useState(""),
+    [presetNote, setPresetNote] = useState(""),
+    [presetError, setPresetError] = useState("");
   const [step, setStep] = useState(0),
     [supported, setSupported] = useState<boolean | null>(null);
   const [compiler, setCompiler] = useState<boolean | null>(null),
@@ -109,6 +131,8 @@ export function Programmer(initialProject: FirmwareProject) {
     [uploaded, setUploaded] = useState(false),
     [elapsed, setElapsed] = useState(0);
   const [showLog, setShowLog] = useState(false);
+  const [clockBusy, setClockBusy] = useState(false);
+  const clock = useRef<ClockSettingsHandle>(null);
   const guide = useRef<HTMLDialogElement>(null);
   const activeOperation = useRef(false);
   const hardware = HARDWARE.find((k) => values[k]);
@@ -116,6 +140,11 @@ export function Programmer(initialProject: FirmwareProject) {
   const coreCount = schema.filter(
     (o) => o.section === CORE_SECTION && values[o.key],
   ).length;
+  const allPresets = [...BUILT_IN_PRESETS, ...(userPresets ?? [])];
+  const preset = allPresets.find((p) => presetKey(p) === presetId);
+  // Derived rather than flagged, so undoing a change clears "(modified)".
+  const presetModified = !!preset &&
+    !sameSelection(values, applyPreset(schema, preset.values).values);
   const errors = validateSelection(schema, values),
     warnings = configurationWarnings(values);
   async function loadReleases() {
@@ -149,7 +178,10 @@ export function Programmer(initialProject: FirmwareProject) {
       const data = await response.json() as FirmwareProject & { error?: string };
       if (!response.ok) throw new Error(data.error || "Could not load firmware.");
       setProject(data);
-      setValues(defaultSelection(data.schema));
+      if (preset) {
+        setValues(rebasePreset(schema, data.schema, preset.values, values));
+        setPresetNote(skippedNote(applyPreset(data.schema, preset.values).skipped));
+      } else setValues(defaultSelection(data.schema));
       setStep(0);
       setFirmwareReady(true);
     } catch (error) {
@@ -170,7 +202,7 @@ export function Programmer(initialProject: FirmwareProject) {
     }
   }
   useEffect(() => {
-    setSupported(!!serialAPI() && window.isSecureContext);
+    setSupported(serialSupported());
     void checkCompiler();
     void loadReleases();
     const api = serialAPI();
@@ -180,6 +212,30 @@ export function Programmer(initialProject: FirmwareProject) {
     api?.addEventListener("disconnect", disconnected);
     return () => api?.removeEventListener("disconnect", disconnected);
   }, []);
+  useEffect(() => {
+    // Read after mount: the page is server-rendered without storage or the query.
+    const stored = loadUserPresets();
+    setUserPresets(stored);
+    const id = new URLSearchParams(window.location.search).get("preset");
+    if (id) {
+      const linked = BUILT_IN_PRESETS.find((p) => p.id === id);
+      if (linked) {
+        const applied = applyPreset(initialProject.schema, linked.values);
+        setValues(applied.values);
+        setPresetId(presetKey(linked));
+        setPresetNote(skippedNote(applied.skipped));
+      } else setPresetError(`Preset “${id}” was not found.`);
+    }
+    setPresetsLoaded(true);
+  }, []);
+  useEffect(() => {
+    if (!presetsLoaded) return;
+    // Only unmodified built-ins are linkable.
+    const url = new URL(window.location.href);
+    if (preset?.builtIn && !presetModified) url.searchParams.set("preset", preset.id);
+    else url.searchParams.delete("preset");
+    if (url.href !== window.location.href) window.history.replaceState(null, "", url);
+  }, [presetsLoaded, preset, presetModified]);
   useEffect(() => {
     if (!busy) return;
     const start = Date.now();
@@ -220,6 +276,8 @@ export function Programmer(initialProject: FirmwareProject) {
   }
   function restore() {
     if (activeOperation.current) return;
+    setPresetId("");
+    setPresetNote("");
     setValues({
       ...defaultSelection(schema),
       ...(hardware ? { [hardware]: true } : {}),
@@ -229,6 +287,81 @@ export function Programmer(initialProject: FirmwareProject) {
     setError("");
     setLog("");
     setShowLog(false);
+  }
+  function skippedNote(skipped: number) {
+    return skipped
+      ? `${skipped} ${skipped === 1 ? "setting" : "settings"} in this preset ${skipped === 1 ? "doesn't" : "don't"} exist in this firmware version and ${skipped === 1 ? "was" : "were"} skipped.`
+      : "";
+  }
+  function choosePreset(next?: Preset) {
+    if (activeOperation.current) return;
+    setPresetId(next ? presetKey(next) : "");
+    setPresetError("");
+    setPresetNote("");
+    if (!next) return restore();
+    const applied = applyPreset(schema, next.values);
+    setValues(applied.values);
+    setPresetNote(skippedNote(applied.skipped));
+    setBuild(null);
+    setUploaded(false);
+    setError("");
+    setLog("");
+    setShowLog(false);
+  }
+  function storeUserPresets(next: Preset[]) {
+    if (!saveUserPresets(next)) {
+      setPresetError("Your browser couldn't save presets. Check its storage settings.");
+      return false;
+    }
+    setUserPresets(next);
+    return true;
+  }
+  function savePreset(mode: "new" | "edit", name: string, description: string) {
+    const list = userPresets ?? [];
+    const taken = allPresets.filter((p) => mode === "new" || p !== preset).map((p) => p.name);
+    const saved: Preset = mode === "edit" && preset && !preset.builtIn
+      ? { ...preset, name: uniqueName(name, taken), description }
+      : { id: crypto.randomUUID(), builtIn: false, name: uniqueName(name, taken), description, values };
+    const next = mode === "edit" ? list.map((p) => (p.id === saved.id ? saved : p)) : [...list, saved];
+    if (!storeUserPresets(next)) return;
+    setPresetError("");
+    // Saving as new captures the on-screen values, so the new preset starts unmodified.
+    setPresetId(presetKey(saved));
+    if (mode === "new") setPresetNote("");
+  }
+  function updatePreset() {
+    if (!preset || preset.builtIn) return;
+    const saved = { ...preset, values };
+    if (storeUserPresets((userPresets ?? []).map((p) => (p.id === saved.id ? saved : p))))
+      setPresetNote("");
+  }
+  function deletePreset() {
+    if (!preset || preset.builtIn) return;
+    if (!storeUserPresets((userPresets ?? []).filter((p) => p.id !== preset.id))) return;
+    setPresetId("");
+    setPresetNote("");
+  }
+  async function importPreset(file: File) {
+    try {
+      const data = parsePresetFile(await file.text());
+      const imported: Preset = {
+        ...data,
+        id: crypto.randomUUID(),
+        builtIn: false,
+        name: uniqueName(data.name, allPresets.map((p) => p.name)),
+      };
+      if (storeUserPresets([...(userPresets ?? []), imported])) choosePreset(imported);
+    } catch (error) {
+      setPresetError(error instanceof Error ? error.message : "Could not import this preset.");
+    }
+  }
+  function exportPreset() {
+    const data = {
+      name: preset?.name ?? "Custom configuration",
+      description: preset?.description ?? "",
+      values,
+    };
+    download(presetFileName(data.name), presetFile(data, { version, revision }), "application/json");
   }
   async function buildFirmware() {
     if (!firmwareReady || errors.length || activeOperation.current) return;
@@ -265,12 +398,12 @@ export function Programmer(initialProject: FirmwareProject) {
     }
   }
   async function connect() {
-    if (activeOperation.current) return;
+    if (activeOperation.current || clockBusy) return;
     try {
       const api = serialAPI();
       if (!api)
         throw new Error(
-          "Open this page in desktop Chrome or Edge to connect over USB.",
+          "Open this page in desktop Chrome, Edge or Firefox to connect over USB.",
         );
       const selected = await api.requestPort();
       setPort(selected);
@@ -287,7 +420,7 @@ export function Programmer(initialProject: FirmwareProject) {
     }
   }
   async function upload() {
-    if (!port || !build || activeOperation.current) return;
+    if (!port || !build || clockBusy || activeOperation.current) return;
     activeOperation.current = true;
     setBusy("upload");
     setElapsed(0);
@@ -295,6 +428,8 @@ export function Programmer(initialProject: FirmwareProject) {
     setError("");
     setUploaded(false);
     try {
+      // The clock may be holding the port open at its own baud rate.
+      await clock.current?.release();
       await uploadFirmware(port, build.hex, (nextPhase, percent) => {
         setPhase(nextPhase);
         setProgress(percent);
@@ -374,16 +509,18 @@ export function Programmer(initialProject: FirmwareProject) {
                 : "Compiler setup needed"}
           </div>
         </div>
-        <section className="panel mb-5 p-5 sm:p-6" aria-labelledby="firmware-source-heading">
-          <div className="flex flex-col gap-4 sm:flex-row sm:items-start sm:justify-between">
-            <div className="max-w-lg">
+        <div className="mb-5 grid items-stretch gap-5 md:grid-cols-2">
+          <section className="panel flex flex-col p-5 sm:p-6 md:order-last" aria-labelledby="firmware-source-heading">
+            <div>
               <h2 id="firmware-source-heading" className="text-sm font-semibold">Firmware source</h2>
               <p className="mt-1 text-xs leading-5 text-muted">
                 Use the latest repository code or choose a release from V15.0 onward.
-                Changing versions resets your configuration and previous build.
+                Changing versions clears your previous build and resets your configuration,
+                or reapplies the selected preset.
               </p>
             </div>
-            <div className="w-full sm:max-w-xs">
+            {/* Pinned to the bottom so it lines up with the preset panel when that is taller. */}
+            <div className="mt-auto pt-4">
               <label htmlFor="firmware-source" className="mb-2 block text-xs font-semibold">Code version</label>
               <select id="firmware-source" value={firmwareId} disabled={!!busy}
                 onChange={event => void selectFirmware(event.target.value)}
@@ -401,13 +538,31 @@ export function Programmer(initialProject: FirmwareProject) {
                 <button onClick={() => void loadReleases()} className="font-medium underline">Retry release list</button>
               </p>}
               {firmwareReady && <p className="mt-2 font-mono text-[10px] text-muted">{version} · {revision.slice(0, 12)}</p>}
+              {sourceError && <div role="alert" className="mt-4 rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs leading-5 text-red-800 dark:text-red-200">{sourceError}{" "}
+                <button disabled={!!busy} onClick={() => void selectFirmware(firmwareId)} className="font-medium underline">Retry version</button>
+              </div>}
+              {busy === "source" && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin" />Loading firmware options…</p>}
             </div>
-          </div>
-          {sourceError && <div role="alert" className="mt-4 rounded-lg bg-red-50 dark:bg-red-950/40 p-3 text-xs leading-5 text-red-800 dark:text-red-200">{sourceError}{" "}
-            <button disabled={!!busy} onClick={() => void selectFirmware(firmwareId)} className="font-medium underline">Retry version</button>
-          </div>}
-          {busy === "source" && <p role="status" className="mt-3 flex items-center gap-2 text-xs text-muted"><LoaderCircle size={14} className="animate-spin" />Loading firmware options…</p>}
-        </section>
+          </section>
+          <section className="panel p-5 sm:p-6" aria-labelledby="preset-heading">
+            <PresetPicker
+              builtIns={BUILT_IN_PRESETS}
+              userPresets={userPresets ?? []}
+              selected={preset}
+              modified={presetModified}
+              note={presetNote}
+              error={presetError}
+              storageAvailable={userPresets !== null}
+              disabled={!!busy || !firmwareReady}
+              onSelect={(key) => choosePreset(allPresets.find((p) => presetKey(p) === key))}
+              onSave={savePreset}
+              onUpdate={updatePreset}
+              onDelete={deletePreset}
+              onImport={(file) => void importPreset(file)}
+              onExport={exportPreset}
+            />
+          </section>
+        </div>
         <div className="grid items-start gap-6 lg:grid-cols-[minmax(0,1fr)_350px]">
           <section
             className="panel overflow-hidden"
@@ -426,7 +581,7 @@ export function Programmer(initialProject: FirmwareProject) {
                   aria-selected={step === i}
                   aria-controls={`panel-${i}`}
                   onClick={() => setStep(i)}
-                  className={`relative flex flex-1 items-center justify-center gap-2 border-b-2 px-2 py-5 text-xs font-semibold sm:text-sm ${step === i ? "border-accent text-accent" : "border-transparent text-muted hover:bg-surface-soft"}`}
+                  className={`relative flex flex-1 items-center justify-center gap-1.5 border-b-2 px-2 py-5 text-xs font-semibold sm:text-sm ${step === i ? "border-accent text-accent" : "border-transparent text-muted hover:bg-surface-soft"}`}
                 >
                   <span
                     className={`flex h-5 w-5 items-center justify-center rounded-full text-[10px] ${step === i ? "bg-brand text-white" : "bg-surface-raised text-muted"}`}
@@ -436,8 +591,11 @@ export function Programmer(initialProject: FirmwareProject) {
                   <Icon size={16} className="hidden sm:block" />
                   {title}
                   {i === 1 && (
-                    <span className="hidden rounded bg-surface-raised px-1.5 py-0.5 text-[10px] sm:block">
+                    <span
+                      className={`hidden rounded border px-1.5 py-0.5 font-mono text-[10px] font-normal tabular-nums sm:block ${step === i ? "border-selected-border bg-selected" : "border-line-strong"}`}
+                    >
                       {coreCount}
+                      <span className="sr-only"> selected</span>
                     </span>
                   )}
                 </button>
@@ -576,7 +734,7 @@ export function Programmer(initialProject: FirmwareProject) {
                   )}
                   <button
                     onClick={buildFirmware}
-                    disabled={!!busy || !firmwareReady || !!errors.length || compiler !== true}
+                    disabled={!!busy || !firmwareReady || !!errors.length || compiler !== true || !supported}
                     className="button-primary w-full"
                   >
                     {busy === "build" ? (
@@ -617,12 +775,12 @@ export function Programmer(initialProject: FirmwareProject) {
                     </p>
                     <p className="mt-0.5 text-[10px] text-muted">
                       {port
-                        ? "Device checked before upload"
+                        ? "Used for uploads and the OSCR clock"
                         : "Use a USB data cable"}
                     </p>
                   </div>
                   <button
-                    disabled={!!busy || !supported}
+                    disabled={!!busy || !supported || clockBusy}
                     onClick={connect}
                     className="text-xs font-semibold text-accent disabled:text-muted"
                   >
@@ -631,7 +789,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 </div>
                 <button
                   onClick={upload}
-                  disabled={!!busy || !build || !port || !supported}
+                  disabled={!!busy || !build || !port || !supported || clockBusy}
                   className="button-secondary mt-4 w-full py-3!"
                 >
                   {busy === "upload" ? (
@@ -656,8 +814,8 @@ export function Programmer(initialProject: FirmwareProject) {
                 </a>
                 <p className="mt-4 text-center text-[10px] leading-5 text-muted">
                   {supported === false
-                    ? "USB upload needs desktop Chrome or Edge over HTTPS. You can still download the SD card files."
-                    : "USB upload works in desktop Chrome and Edge."}
+                    ? "USB upload needs desktop Chrome, Edge or Firefox over HTTPS. You can still download the SD card files."
+                    : "USB upload works in desktop Chrome, Edge and Firefox."}
                 </p>
               </div>
             </section>
@@ -668,6 +826,7 @@ export function Programmer(initialProject: FirmwareProject) {
                 exceed your reader’s memory.
               </p>
             </div>
+            <ClockSettings ref={clock} port={port} disabled={!!busy || !supported} onBusyChange={setClockBusy} />
           </aside>
         </div>
         <div aria-live="polite" className="mt-5 space-y-3">
@@ -816,7 +975,7 @@ export function Programmer(initialProject: FirmwareProject) {
           </li>
         </ol>
         <div className="mt-5 rounded-lg bg-surface-soft p-4 text-xs leading-5 text-muted">
-          Use desktop Chrome or Edge. A hosted installation needs HTTPS and a
+          Use desktop Chrome, Edge or Firefox. A hosted installation needs HTTPS and a
           Node server with Arduino CLI. Your USB port is accessed only by your
           browser; configuration and compilation run on the server.
         </div>

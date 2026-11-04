@@ -7,14 +7,51 @@ import { gitRevision } from "./git-refs";
 import firmwareSource from "../firmware-source.mjs";
 
 type Timed<T> = { at: number; value: T; retryAt?: number };
+export interface FirmwareMetadata {
+  releases(): Promise<FirmwareRelease[]>;
+  project(id?: string): Promise<FirmwareProject>;
+}
+// Durable Object RPC preserves plain data, not Error subclasses.
+export type MetadataReply<T> = { ok: true; value: T } | { ok: false; status: number; error: string };
+export async function metadataReply<T>(load: () => Promise<T>): Promise<MetadataReply<T>> {
+  try { return { ok: true, value: await load() }; }
+  catch (error) {
+    if (error instanceof FirmwareError) return { ok: false, status: error.status, error: error.message };
+    console.error("Firmware metadata failed", error);
+    return { ok: false, status: 502, error: "The firmware service could not complete this request. Please try again." };
+  }
+}
+export function metadataValue<T>(reply: MetadataReply<T>) {
+  if (!reply.ok) throw new FirmwareError(reply.error, reply.status);
+  return reply.value;
+}
+// Workers' global fetch rejects calls with a FirmwareSources receiver.
+const globalFetch: typeof fetch = (...args) => fetch(...args);
+// Shared by every FirmwareSources in this isolate, for one store, fetcher and credential.
+// Run these methods inside a Durable Object, whose requests share one I/O context. Cancelling
+// a stateless Worker request leaves its promises unsettled, hanging the callers that joined it.
+const flights = new WeakMap<BuildStore, WeakMap<typeof fetch, Map<string, Promise<unknown>>>>();
 class GitHubError extends FirmwareError {
   constructor(readonly upstreamStatus: number, readonly retryAt = Date.now() + 60_000) {
     super(`GitHub could not load this firmware (${upstreamStatus}). Please try again shortly.`, 502);
   }
 }
 export class FirmwareSources {
-  // Workers' global fetch rejects calls with a FirmwareSources receiver.
-  constructor(private store: BuildStore, private githubToken?: string, private fetcher: typeof fetch = (...args) => fetch(...args)) {}
+  constructor(private store: BuildStore, private githubToken?: string, private fetcher: typeof fetch = globalFetch) {}
+  // Flights span the cache read through its write, and resolve to parsed values rather than
+  // Responses. A caller either joins or starts after the result has been stored.
+  private shared<T>(key: string, load: () => Promise<T>): Promise<T> {
+    const fetchers = flights.get(this.store) ?? new WeakMap<typeof fetch, Map<string, Promise<unknown>>>();
+    flights.set(this.store, fetchers);
+    const pending = fetchers.get(this.fetcher) ?? new Map<string, Promise<unknown>>();
+    fetchers.set(this.fetcher, pending);
+    const id = JSON.stringify([this.githubToken ?? null, key]);
+    const running = pending.get(id) as Promise<T> | undefined;
+    if (running) return running;
+    const flight = load().finally(() => pending.delete(id));
+    pending.set(id, flight);
+    return flight;
+  }
   private async upstream(url: string, init: RequestInit = {}) {
     const headers = new Headers(init.headers);
     headers.set("User-Agent", "cartreader-web-programmer");
@@ -54,7 +91,10 @@ export class FirmwareSources {
       return gitRevision(await response.arrayBuffer(), id === "latest" ? "HEAD" : `refs/tags/${ref}`);
     }
   }
-  async releases(): Promise<FirmwareRelease[]> {
+  releases(): Promise<FirmwareRelease[]> {
+    return this.shared("releases", () => this.loadReleases());
+  }
+  private async loadReleases(): Promise<FirmwareRelease[]> {
     const object = await this.store.get("metadata/releases.json");
     const cached = object ? await object.json<Timed<FirmwareRelease[]>>() : null;
     if (cached && (Date.now() - cached.at < 300_000 || (cached.retryAt ?? 0) > Date.now())) return cached.value;
@@ -74,6 +114,9 @@ export class FirmwareSources {
   async project(id = "latest"): Promise<FirmwareProject> {
     if (id !== "latest" && !/^release:[A-Za-z0-9][A-Za-z0-9._-]{0,99}$/.test(id))
       throw new FirmwareError("Invalid firmware source.");
+    return this.shared(`project:${id}`, () => this.loadProject(id));
+  }
+  private async loadProject(id: string): Promise<FirmwareProject> {
     if (id !== "latest" && !(await this.releases()).some(release => release.id === id))
       throw new FirmwareError("Choose a published release from the list.");
     const pointerKey = `metadata/${encodeURIComponent(id)}.json`;
@@ -82,17 +125,19 @@ export class FirmwareSources {
     const ttl = id === "latest" ? 60_000 : 300_000;
     let revision = cached && Date.now() - cached.at < ttl ? cached.value : "";
     if (!revision) revision = await this.revision(id);
-    const projectKey = `projects/${revision}.json`;
-    const prepared = await this.store.get(projectKey);
-    let project = prepared ? await prepared.json<FirmwareProject>() : null;
-    if (!project) {
-      const raw = `https://raw.githubusercontent.com/${firmwareSource.slug}/${revision}/${firmwareSource.sketch}`;
-      const [config, cpp] = await Promise.all([this.upstream(`${raw}/Config.h`), this.upstream(`${raw}/OSCR.cpp`)]);
-      project = projectFromSource(await config.text(), await cpp.text(), revision);
-      await this.store.put(projectKey, JSON.stringify(project));
-    }
+    const project = await this.shared(`source:${revision}`, () => this.prepare(revision));
     if (!cached || cached.value !== revision || Date.now() - cached.at >= ttl)
       await this.store.put(pointerKey, JSON.stringify({ at: Date.now(), value: revision }));
+    return project;
+  }
+  private async prepare(revision: string): Promise<FirmwareProject> {
+    const projectKey = `projects/${revision}.json`;
+    const prepared = await this.store.get(projectKey);
+    if (prepared) return prepared.json<FirmwareProject>();
+    const raw = `https://raw.githubusercontent.com/${firmwareSource.slug}/${revision}/${firmwareSource.sketch}`;
+    const [config, cpp] = await Promise.all([this.upstream(`${raw}/Config.h`), this.upstream(`${raw}/OSCR.cpp`)]);
+    const project = projectFromSource(await config.text(), await cpp.text(), revision);
+    await this.store.put(projectKey, JSON.stringify(project));
     return project;
   }
   async prepared(revision: string) {

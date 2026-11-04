@@ -2,7 +2,7 @@ import { validateSelection, generateConfig, type Selection } from "../src/lib/co
 import { FirmwareError } from "../src/lib/errors";
 import { validateBuildOrigin, readBuildRequest } from "../src/lib/build-request";
 import { buildKey, cachedBuild, type BuildJob, type BuildStore } from "./build-cache";
-import { FirmwareSources } from "./sources";
+import { FirmwareSources, type FirmwareMetadata } from "./sources";
 import type { BuildResult } from "../src/lib/firmware";
 
 export interface ServiceEnv {
@@ -10,17 +10,18 @@ export interface ServiceEnv {
   GITHUB_TOKEN?: string;
   APP_ORIGIN?: string;
 }
-export async function handleService(request: Request, env: ServiceEnv, compile: (job: BuildJob) => Promise<BuildResult>) {
+export async function handleService(request: Request, env: ServiceEnv, compile: (job: BuildJob) => Promise<BuildResult>, metadata?: FirmwareMetadata) {
   const url = new URL(request.url);
   const sources = new FirmwareSources(env.BUILD_CACHE, env.GITHUB_TOKEN);
+  const resolver = metadata ?? sources;
   const headers = { "Cache-Control": "no-store" };
   try {
     if (request.method === "GET" && url.pathname === "/api/health")
       return Response.json({ ready: true, backend: "cloudflare" }, { headers });
     if (request.method === "GET" && url.pathname === "/api/releases")
-      return Response.json({ releases: await sources.releases() }, { headers });
+      return Response.json({ releases: await resolver.releases() }, { headers });
     if (request.method === "GET" && url.pathname === "/api/firmware")
-      return Response.json(await sources.project(url.searchParams.get("source") ?? "latest"), { headers });
+      return Response.json(await resolver.project(url.searchParams.get("source") ?? "latest"), { headers });
     if (request.method === "POST" && url.pathname === "/api/build") {
       validateBuildOrigin(request, env.APP_ORIGIN);
       const { revision, values } = await readBuildRequest(request);

@@ -17,5 +17,16 @@
       { "binding": "FIRMWARE_SERVICE", "service": "cartreader-firmware-preview" }
     ]
   },
-  "observability": { "enabled": true }
+  "observability": { "enabled": true },
+  "env": {
+    "staging": {
+      "name": "cartreader-web-programmer-staging",
+      "routes": [ { "pattern": "staging.programmer.oscruser.group", "custom_domain": true } ],
+      "vars": { "FIRMWARE_BACKEND": "cloudflare" },
+      "services": [
+        { "binding": "FIRMWARE_SERVICE", "service": "cartreader-firmware-preview" },
+        { "binding": "WORKER_SELF_REFERENCE", "service": "cartreader-web-programmer-staging" }
+      ]
+    }
+  }
 }

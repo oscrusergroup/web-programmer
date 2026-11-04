@@ -72,6 +72,21 @@ All website branch previews share this one testing backend. The latest preview b
 
 For a local deployment with Docker running, use `pnpm run cf:build` followed by `pnpm run cf:deploy:preview`. Keep the production `cf:deploy:firmware` command out of the Preview command. `pnpm run cf:preview` is a local OpenNext preview server, not the command for a hosted branch preview. See [Worker Preview configuration](https://developers.cloudflare.com/workers/previews/configuration/) and [service-binding limitations](https://developers.cloudflare.com/workers/previews/resources/#service-bindings).
 
+### Staging site
+
+`https://staging.programmer.oscruser.group` serves the `staging` branch from a separate Worker, `cartreader-web-programmer-staging`, defined by the `staging` environment in `wrangler.jsonc`. It attaches the staging hostname as a Workers custom domain and binds `FIRMWARE_SERVICE` to the same `cartreader-firmware-preview` backend as branch previews, so staging builds never touch the production cache or compiler.
+
+In **Workers & Pages > cartreader-web-programmer-staging > Settings > Build**, connect this repository and use:
+
+| Setting | Value |
+| --- | --- |
+| Production branch | `staging` |
+| Build command | `pnpm run cf:build` |
+| Deploy command | `pnpm run cf:deploy:staging` |
+| Non-production branch builds | Disabled |
+
+`cf:deploy:staging` deploys the preview firmware Worker, then publishes the website with `--env staging`. To deploy from your computer with Docker running, use `pnpm run cf:build` followed by `pnpm run cf:deploy:staging`. Exclude `staging` from the production Worker's preview branch builds so the two jobs do not deploy the shared preview backend at the same time.
+
 If `wrangler preview` reports a missing `previews` block, commit and push the updated `wrangler.jsonc` to the branch. Retrying an older commit will still use its old configuration.
 
 If deployment fails with `R2 bucket 'cartreader-build-cache' not found` (code 10085), open **R2 Object Storage** in the same account as the Workers, complete R2 activation if prompted, and create a bucket named exactly `cartreader-build-cache`. Declaring the binding in `wrangler.firmware.jsonc` does not create this named bucket. If `cf:bucket` reports `Please enable R2 through the Cloudflare Dashboard` (code 10042), activation must be completed in the dashboard first. Then retry the deployment; no firmware settings need changing.

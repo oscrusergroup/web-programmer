@@ -2,6 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import {
   SerialTransport,
+  serialSupported,
   uploadFirmware,
   type SerialPort,
 } from "../src/lib/serial/web-serial";
@@ -140,4 +141,22 @@ test("uploads over serial streams when the first sign-on is lost during reset", 
   assert.equal(closed, true);
   assert.equal(readable.locked, false);
   assert.equal(writable.locked, false);
+});
+
+test("serial support needs both the Web Serial API and a secure context", (t) => {
+  t.after(() => {
+    Reflect.deleteProperty(globalThis, "navigator");
+    Reflect.deleteProperty(globalThis, "window");
+  });
+  const browser = (serial: object | undefined, isSecureContext: boolean) => {
+    Object.defineProperty(globalThis, "navigator", { value: { serial }, configurable: true });
+    Object.defineProperty(globalThis, "window", { value: { isSecureContext }, configurable: true });
+  };
+
+  browser({}, true);
+  assert.equal(serialSupported(), true);
+  browser(undefined, true);
+  assert.equal(serialSupported(), false);
+  browser({}, false);
+  assert.equal(serialSupported(), false);
 });
